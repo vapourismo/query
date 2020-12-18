@@ -1,0 +1,30 @@
+cabal-version: >= 2
+name:          query
+version:       0
+build-type:    Simple
+
+library
+  default-language: Haskell2010
+  ghc-options:      -Wall -Wno-name-shadowing
+  build-depends:    base, aeson, text, scientific, unordered-containers, vector,
+                    containers, sop-core, free, profunctors, mtl, bytestring,
+                    kan-extensions, generics-sop
+  hs-source-dirs:   src
+  exposed-modules:  Data.Query
+                    Data.Query.Decode
+                    Data.Query.Decode.JSON
+                    Data.Query.Decode.Types
+                    Data.Query.Encode
+                    Data.Query.Encode.JSON
+                    Data.Query.Encode.Projection
+                    Data.Query.Encode.Types
+                    Data.Query.Evaluate
+                    Data.Query.Function
+                    Data.Query.Generic
+                    Data.Query.Generic.Class
+                    Data.Query.Generic.Options
+                    Data.Query.Schema
+                    Data.Query.Schema.Types
+                    Data.Query.Structure
+                    Data.Query.Value
+  other-modules:    Data.Query.Utilities
