@@ -81,4 +81,4 @@ data StructureBase p a b where
 
 newtype Structure p a b = Structure
   { unStructure :: Coyoneda (StructureBase p) a b }
-  deriving newtype Profunctor
+  deriving newtype (Functor, Profunctor)
