@@ -14,12 +14,14 @@ where
 
 import           Control.Monad (unless)
 import           Data.Bifunctor (Bifunctor (first))
+import           Data.Fix (Fix (Fix))
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Encode.Types as Types
 import qualified Data.Query.Schema.Types as Types
+import qualified Data.Query.Shape as Shape
 import qualified Data.SOP as SOP
 import           Data.Text (Text)
 
@@ -28,7 +30,7 @@ data ProjectionError
   | MissingVariantConstructor Text
   | TargetFieldIsMandatory
   | ExtraMandatoryFields (HashSet.HashSet Text)
-  | forall a. CompleteMismatch Types.Shape (Encode.Encoder a)
+  | forall a. CompleteMismatch Shape.Shape (Encode.Encoder a)
 
 deriving instance Show ProjectionError
 
@@ -50,7 +52,7 @@ nestProjectionError path =
     LocatedProjectionError (path : paths) error
 
 projectEncoder
-  :: Types.Shape
+  :: Shape.Shape
   -> Encode.Encoder a
   -> Either LocatedProjectionError (Encode.Encoder a)
 projectEncoder target sourceEncoder =
@@ -60,29 +62,29 @@ projectEncoder target sourceEncoder =
         projectEncoderBase target source
 
 projectEncoderBase
-  :: Types.Shape
+  :: Shape.Shape
   -> Types.EncoderBase a
   -> Either LocatedProjectionError (Types.EncoderBase a)
-projectEncoderBase target source =
+projectEncoderBase fixTarget@(Fix target) source =
   case (target, source) of
-    (Types.Bool, Types.BoolEncoder) ->
+    (Shape.Bool, Types.BoolEncoder) ->
       pure source
 
-    (Types.Number, Types.NumberEncoder) ->
+    (Shape.Number, Types.NumberEncoder) ->
       pure source
 
-    (Types.String, Types.StringEncoder) ->
+    (Shape.String, Types.StringEncoder) ->
       pure source
 
-    (Types.Array targetItems, Types.ArrayEncoder sourceItems) ->
+    (Shape.Array targetItems, Types.ArrayEncoder sourceItems) ->
       nestProjectionError Types.ArrayPath $
         Types.ArrayEncoder <$> projectEncoder targetItems sourceItems
 
-    (Types.StringMap targetItems, Types.StringMapEncoder sourceItems) ->
+    (Shape.StringMap targetItems, Types.StringMapEncoder sourceItems) ->
       nestProjectionError Types.StringMapPath $
         Types.StringMapEncoder <$> projectEncoder targetItems sourceItems
 
-    (Types.Enum targetsList, Types.EnumEncoder sourceItems) -> do
+    (Shape.Enum targetsList, Types.EnumEncoder sourceItems) -> do
       let
         targets = HashSet.fromList targetsList
 
@@ -96,7 +98,7 @@ projectEncoderBase target source =
 
       pure source
 
-    (Types.Variant targets, Types.VariantEncoder sourceConstructors) -> do
+    (Shape.Variant targets, Types.VariantEncoder sourceConstructors) -> do
       sourceConstructors <-
         SOP.htraverse'
           (\(Types.ConstructorEncoder name encoder) -> do
@@ -112,10 +114,10 @@ projectEncoderBase target source =
 
       pure $ Types.VariantEncoder sourceConstructors
 
-    (Types.Record targetFields, Types.RecordEncoder sourceFields) -> do
+    (Shape.Record targetFields, Types.RecordEncoder sourceFields) -> do
       let
         mandatoryExtraFields =
-          HashMap.filter (not . Types.fieldShape_optional) $
+          HashMap.filter (not . Shape.fieldShape_optional) $
             HashMap.difference targetFields sourceFields
 
       unless (null mandatoryExtraFields) $
@@ -130,14 +132,14 @@ projectEncoderBase target source =
           sourceFields
 
     _ ->
-      throwProjectionError $ CompleteMismatch target $ Types.Encoder $
+      throwProjectionError $ CompleteMismatch fixTarget $ Types.Encoder $
         Contravariant.Coyoneda.liftCoyoneda source
 
 projectFieldEncoder
-  :: Types.FieldShape
+  :: Shape.FieldShape
   -> Types.FieldEncoder a
   -> Either LocatedProjectionError (Types.FieldEncoder a)
-projectFieldEncoder (Types.FieldShape target optional) (Types.FieldEncoder sourceField) =
+projectFieldEncoder (Shape.FieldShapeF target optional) (Types.FieldEncoder sourceField) =
   case sourceField of
     Contravariant.Coyoneda.Coyoneda f sourceSelector -> do
       let rewrap = Types.FieldEncoder . Contravariant.Coyoneda.Coyoneda f

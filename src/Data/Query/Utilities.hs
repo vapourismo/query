@@ -8,6 +8,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Data.Query.Utilities
   ( ContravariantCoyonedaShow (..)
@@ -15,14 +17,21 @@ module Data.Query.Utilities
   , foldTypeRep
   , typeReps
   , ApCoyoneda (..)
+  , PluggableShow (..)
+  , PluggableShowEnv (..)
+  , FunctorShow1 (..)
+  , customLiftShowsPrec
   )
 where
 
 import           Control.Applicative.Free (Ap, hoistAp)
+import           Data.Coerce (Coercible, coerce)
+import qualified Data.Functor.Classes as Functor
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant
 import qualified Data.Functor.Coyoneda as Functor
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
+import qualified Data.Reflection as Reflection
 import qualified Data.SOP as SOP
 import qualified Type.Reflection as Reflection
 
@@ -66,3 +75,44 @@ instance Profunctor (ApCoyoneda f) where
   lmap f = ApCoyoneda . hoistAp (lmap f) . unApCoyoneda
 
   rmap = fmap
+
+newtype PluggableShow a = PluggableShow
+  { unPluggableShow :: a }
+
+data PluggableShowEnv a = PluggableShowEnv
+  { pluggableShowEnv_showsPrec :: Int -> PluggableShow a -> ShowS
+  , pluggableShowEnv_showList :: [PluggableShow a] -> ShowS
+  }
+
+instance Reflection.Given (PluggableShowEnv a) => Show (PluggableShow a) where
+  showsPrec = pluggableShowEnv_showsPrec Reflection.given
+
+  showList = pluggableShowEnv_showList Reflection.given
+
+newtype FunctorShow1 f a = FunctorShow1 (f a)
+
+instance
+  ( (forall x. Coercible (f x) (f (PluggableShow x)))
+  , (forall x. (Show x => Show (f x)))
+  )
+  => Functor.Show1 (FunctorShow1 f)
+  where
+    liftShowsPrec p l n (FunctorShow1 i) = customLiftShowsPrec p l n i
+
+customLiftShowsPrec
+  :: ( Coercible (f a) (f (PluggableShow a))
+     , (forall x. (Show x => Show (f x)))
+     )
+  => (Int -> a -> ShowS)
+  -> ([a] -> ShowS)
+  -> Int
+  -> f a
+  -> ShowS
+customLiftShowsPrec envShowsPrec envShowList prec (shape :: f a) =
+  Reflection.give env showsPrec prec (coerce shape :: f (PluggableShow a))
+  where
+    env :: PluggableShowEnv a
+    env = PluggableShowEnv
+      { pluggableShowEnv_showsPrec = coerce envShowsPrec
+      , pluggableShowEnv_showList = coerce envShowList
+      }

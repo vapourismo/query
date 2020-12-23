@@ -17,9 +17,7 @@ import           Control.Applicative.Free (Ap)
 import           Data.HashMap.Strict (HashMap)
 import           Data.Profunctor (Profunctor (..))
 import           Data.Profunctor.Yoneda (Coyoneda (..))
-import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Encode as Encode
-import qualified Data.Query.Generic as Generic
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import           Data.Scientific (Scientific)
@@ -125,47 +123,6 @@ data QuerySchema a b
     , querySchema_encode :: Encode.Encoder a
     -- ^ Encoder for the thing
     }
-
-data FieldShape = FieldShape
-  { fieldShape_schema :: Shape
-  -- ^ Shape of the field value
-  , fieldShape_optional :: Bool
-  -- ^ Is the field optional?
-  }
-  deriving stock (Show, Generic)
-  deriving anyclass (Generics.Generic, Generics.HasDatatypeInfo)
-
-deriving
-  via
-    Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] FieldShape
-  instance
-    Encode.HasFieldsEncoder FieldShape
-
-deriving
-  via
-    Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] FieldShape
-  instance
-    Decode.HasFieldsDecoder FieldShape
-
-instance Encode.HasEncoder FieldShape where
-  encoder = Encode.record
-
-instance Decode.HasDecoder FieldShape where
-  decoder = Decode.record
-
-data Shape
-  = Bool
-  | Number
-  | String
-  | Nullable Shape
-  | Array Shape
-  | StringMap Shape
-  | Enum [Text]
-  | Variant (HashMap Text Shape)
-  | Record (HashMap Text FieldShape)
-  deriving stock (Show, Generic)
-  deriving anyclass (Generics.Generic, Generics.HasDatatypeInfo)
-  deriving (Encode.HasEncoder, Decode.HasDecoder) via Generic.Generic Shape
 
 -- | Path into an encoded 'Data.Query.Value.Value', 'Schema', 'Data.Query.Decode.Types.Decoder'
 -- or 'Data.Query.Encode.Types.Encoder'

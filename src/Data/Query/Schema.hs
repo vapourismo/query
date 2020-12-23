@@ -61,6 +61,7 @@ where
 
 import           Control.Applicative.Free (liftAp, runAp, runAp_)
 import           Data.Coerce (coerce)
+import           Data.Fix (Fix (Fix), unFix)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (dimap), lmap)
@@ -104,10 +105,8 @@ instance HasSchema a => HasSchema [a] where
 instance HasSchema a => HasSchema (HashMap.HashMap Text a) where
   schema = stringMap
 
-instance HasSchema Types.Shape
-
-instance HasSchema Types.FieldShape where
-  schema = record
+instance (Reflection.Typeable f, HasSchema (f (Fix f))) => HasSchema (Fix f) where
+  schema = dimap unFix Fix schema
 
 instance
   ( Reflection.Typeable a
@@ -128,10 +127,6 @@ class HasFieldsSchema a where
 
 instance HasFieldsSchema () where
   fieldsSchema = pure ()
-
-deriving
-  via Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] Types.FieldShape
-  instance HasFieldsSchema Types.FieldShape
 
 instance
   ( Reflection.Typeable a

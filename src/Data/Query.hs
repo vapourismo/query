@@ -32,7 +32,7 @@ import qualified Data.Query.Encode.JSON as Encode.JSON
 import qualified Data.Query.Encode.Projection as Projection
 import qualified Data.Query.Evaluate as Evaluate
 import           Data.Query.Function (Function (Function))
-import qualified Data.Query.Schema.Types as Schema
+import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Value as Value
 import           Data.Text (Text)
 import qualified Type.Reflection as Reflection
@@ -132,7 +132,7 @@ data TopLevelMatchError
 
 data TopLevelQuery = TopLevelQuery
   { topLevelQuery_query  :: Value.CallValue
-  , topLevelQuery_return :: Maybe Schema.Shape
+  , topLevelQuery_return :: Maybe Shape.Shape
   }
 
 instance Aeson.FromJSON TopLevelQuery where

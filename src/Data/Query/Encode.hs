@@ -67,6 +67,7 @@ where
 
 import           Control.Applicative.Free (Ap, hoistAp, liftAp, runAp_)
 import           Data.Coerce (coerce)
+import           Data.Fix (Fix, unFix)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
 import qualified Data.HashMap.Strict as HashMap
@@ -107,6 +108,9 @@ instance HasEncoder a => HasEncoder [a] where
 
 instance HasEncoder a => HasEncoder (HashMap.HashMap Text a) where
   encoder = stringMap
+
+instance HasEncoder (f (Fix f)) => HasEncoder (Fix f) where
+  encoder = contramap unFix encoder
 
 instance
   ( Generic.GHas HasEncoder a

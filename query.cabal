@@ -8,7 +8,7 @@ library
   ghc-options:      -Wall -Wno-name-shadowing
   build-depends:    base, aeson, text, scientific, unordered-containers, vector,
                     containers, sop-core, free, profunctors, mtl, bytestring,
-                    kan-extensions, generics-sop
+                    kan-extensions, generics-sop, prettyprinter, data-fix, reflection
   hs-source-dirs:   src
   exposed-modules:  Data.Query
                     Data.Query.Decode
@@ -25,5 +25,6 @@ library
                     Data.Query.Generic.Options
                     Data.Query.Schema
                     Data.Query.Schema.Types
+                    Data.Query.Shape
                     Data.Query.Value
   other-modules:    Data.Query.Utilities

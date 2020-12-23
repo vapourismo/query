@@ -57,6 +57,7 @@ where
 
 import           Control.Applicative.Free (liftAp)
 import           Data.Coerce (coerce)
+import           Data.Fix (Fix (Fix))
 import qualified Data.Functor.Coyoneda as Coyoneda
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (..))
@@ -97,6 +98,9 @@ instance HasDecoder a => HasDecoder [a] where
 
 instance HasDecoder a => HasDecoder (HashMap.HashMap Text a) where
   decoder = stringMap
+
+instance (Reflection.Typeable f, HasDecoder (f (Fix f))) => HasDecoder (Fix f) where
+  decoder = Fix <$> decoder
 
 instance
   ( Reflection.Typeable a
