@@ -25,6 +25,5 @@ library
                     Data.Query.Generic.Options
                     Data.Query.Schema
                     Data.Query.Schema.Types
-                    Data.Query.Structure
                     Data.Query.Value
   other-modules:    Data.Query.Utilities
