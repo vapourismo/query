@@ -21,9 +21,12 @@ import qualified Data.Text as Text
 import           Data.Vector (Vector)
 
 newtype ItemEncoder a = ItemEncoder
-  { unItemEncoder :: Text }
+  { itemEncoder_name :: Text }
 
-data ConstructorEncoder f a = ConstructorEncoder Text (Encoder (f a))
+data ConstructorEncoder f a = ConstructorEncoder
+  { constructorEncoder_name :: Text
+  , constructorEncoder_value :: Encoder (f a)
+  }
 
 instance Functor f => Contravariant (ConstructorEncoder f) where
   contramap f (ConstructorEncoder name encoder) =
@@ -98,7 +101,7 @@ instance Show (EncoderBase a) where
           " | "
           (map
             Text.unpack
-            (SOP.hcollapse (SOP.hmap (SOP.K . unItemEncoder) encoders))
+            (SOP.hcollapse (SOP.hmap (SOP.K . itemEncoder_name) encoders))
           )
       , " >"
       ]
