@@ -249,7 +249,7 @@ instance Generic.SchemaFlavour HasDecoder where
 
   data ConstructorSchema HasDecoder f a = GConstructorDecoder Text (Types.ConstructorQuery (f a))
 
-  newtype FieldsSchema HasDecoder a b = GFieldsDecoder
+  newtype FieldsSchema HasDecoder _ b = GFieldsDecoder
     { unGFieldsDecoder :: Types.FieldsDecoder b }
 
   querySchema = GQuery query

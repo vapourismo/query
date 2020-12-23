@@ -253,7 +253,7 @@ instance Generic.SchemaFlavour HasEncoder where
   newtype Schema HasEncoder a = GEncoder
     { unGEncoder :: Types.Encoder a }
 
-  newtype ItemSchema HasEncoder f a = GItemEncoder
+  newtype ItemSchema HasEncoder _ a = GItemEncoder
     { unGItemEncoder :: Types.ItemEncoder a }
 
   newtype ConstructorSchema HasEncoder f a = GConstructorEncoder
