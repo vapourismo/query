@@ -34,9 +34,7 @@ data ConstructorSchema f a where
   ConstructorSchema
     :: Text
     -- ^ Constructor name
-    -> (f a -> b)
-    -> (c -> f a)
-    -> QuerySchema b c
+    -> Coyoneda QuerySchema (f a) (f a)
     -- ^ Constructor value schema
     -> ConstructorSchema f a
 

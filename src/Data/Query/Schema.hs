@@ -64,7 +64,7 @@ import           Data.Coerce (coerce)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (dimap), lmap)
-import qualified Data.Profunctor.Yoneda as Profunctor.Yoneda
+import           Data.Profunctor.Yoneda (Coyoneda (Coyoneda), returnCoyoneda)
 import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Generic as Generic
@@ -156,7 +156,7 @@ querySchemaWith = Types.DecodableSchema Reflection.typeRep
 -- * Schemas
 
 liftBase :: Types.SchemaBase a b -> Types.Schema a b
-liftBase = Types.Schema . Profunctor.Yoneda.returnCoyoneda
+liftBase = Types.Schema . returnCoyoneda
 
 bool :: Types.Schema Bool Bool
 bool = liftBase Types.BoolSchema
@@ -221,8 +221,8 @@ constructorWith
   -> (c -> f a)
   -> Types.QuerySchema b c
   -> Types.ConstructorSchema f a
-constructorWith =
-  Types.ConstructorSchema
+constructorWith name f g query =
+  Types.ConstructorSchema name $ Coyoneda f g query
 
 record :: HasFieldsSchema a => Types.Schema a a
 record = recordWith fieldsSchema
@@ -231,7 +231,7 @@ recordWith :: Types.FieldsSchema a b -> Types.Schema a b
 recordWith = liftBase . Types.RecordSchema
 
 liftFieldSchema :: Types.FieldSchema a b -> Types.FieldsSchema a b
-liftFieldSchema = Types.FieldsSchema . liftAp . Profunctor.Yoneda.returnCoyoneda
+liftFieldSchema = Types.FieldsSchema . liftAp . returnCoyoneda
 
 field :: HasSchema b => Text -> (a -> b) -> Types.FieldsSchema a b
 field name = fieldWith name querySchema
@@ -338,7 +338,7 @@ querySchemaToEncoder = \case
   Types.UndecodableSchema _ encoder -> encoder
 
 schemaToEncoder :: Types.Schema a b -> Encode.Encoder a
-schemaToEncoder (Types.Schema (Profunctor.Yoneda.Coyoneda f _ schemaBase)) =
+schemaToEncoder (Types.Schema (Coyoneda f _ schemaBase)) =
   contramap f $ schemaBaseToEncoder schemaBase
 
 schemaBaseToEncoder :: Types.SchemaBase a b -> Encode.Encoder a
@@ -370,7 +370,7 @@ schemaBaseToEncoder = \case
   Types.VariantSchema constructors ->
     Encode.variantWith $
       SOP.hmap
-        (\(Types.ConstructorSchema name extract _ schema) ->
+        (\(Types.ConstructorSchema name (Coyoneda extract _ schema)) ->
           Encode.constructorWith name (contramap extract (querySchemaToEncoder schema))
         )
         constructors
@@ -378,7 +378,7 @@ schemaBaseToEncoder = \case
   Types.RecordSchema (Types.FieldsSchema fields) ->
     Encode.recordWith $
       runAp_
-        (\(Profunctor.Yoneda.Coyoneda f _ fieldSchema) ->
+        (\(Coyoneda f _ fieldSchema) ->
           case fieldSchema of
             Types.MandatoryFieldSchema name schema ->
               HashMap.singleton name
@@ -401,7 +401,7 @@ querySchemaToQuery = \case
     Reflection.withTypeable typeRep Decode.undecodableQuery
 
 schemaToDecoder :: Types.Schema a b -> Decode.Decoder b
-schemaToDecoder (Types.Schema (Profunctor.Yoneda.Coyoneda _ f schemaBase)) =
+schemaToDecoder (Types.Schema (Coyoneda _ f schemaBase)) =
   f <$> schemaBaseToDecoder schemaBase
 
 schemaBaseToDecoder :: Types.SchemaBase a b -> Decode.Decoder b
@@ -434,7 +434,7 @@ schemaBaseToDecoder = \case
   Types.VariantSchema constructors ->
     Decode.variantWith $ HashMap.fromList $ SOP.hcollapse $
       SOP.hzipWith
-        (\(Types.ConstructorSchema name _ lift schema) (SOP.Fn construct) -> do
+        (\(Types.ConstructorSchema name (Coyoneda _ lift schema)) (SOP.Fn construct) -> do
           let query = querySchemaToQuery schema
           let mkValue = SOP.unK . construct . lift
           SOP.K (name, Decode.constructorWith query mkValue)
@@ -445,7 +445,7 @@ schemaBaseToDecoder = \case
   Types.RecordSchema fields ->
     Decode.recordWith $
       runAp
-        (\(Profunctor.Yoneda.Coyoneda _ g fieldSchema) ->
+        (\(Coyoneda _ g fieldSchema) ->
           case fieldSchema of
             Types.MandatoryFieldSchema name schema ->
               fmap g $ Decode.fieldWith name $ querySchemaToQuery schema
