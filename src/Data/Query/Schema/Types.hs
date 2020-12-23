@@ -65,7 +65,7 @@ data ItemSchema f a = ItemSchema
   -- ^ Enum item
   { itemSchema_identifier :: Text
   -- ^ Enum value identifier
-  , itemSchema_value      :: f a
+  , itemSchema_value :: f a
   -- ^ Value representing the enum value
   }
 
@@ -115,19 +115,19 @@ data QuerySchema a b
     -- ^ Query for things that can be encoded and decoded
     { querySchema_decodeType :: Reflection.TypeRep b
     -- ^ Type of the thing to be decoded
-    , querySchema_schema     :: Schema a b
+    , querySchema_schema :: Schema a b
     -- ^ Schema for the things
     }
   | UndecodableSchema
     -- ^ Query for something that can't be decoded
     { querySchema_decodeType :: Reflection.TypeRep b
     -- ^ Type of the thing to be decoded
-    , querySchema_encode     :: Encode.Encoder a
+    , querySchema_encode :: Encode.Encoder a
     -- ^ Encoder for the thing
     }
 
 data FieldShape = FieldShape
-  { fieldShape_schema   :: Shape
+  { fieldShape_schema :: Shape
   -- ^ Shape of the field value
   , fieldShape_optional :: Bool
   -- ^ Is the field optional?
@@ -178,5 +178,5 @@ data Path
   -- ^ Variant constructor body
   | FieldPath Text
   -- ^ Record field
-  deriving stock ( Show, Eq, Ord, Generic )
-  deriving anyclass ( Generics.Generic, Generics.HasDatatypeInfo )
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (Generics.Generic, Generics.HasDatatypeInfo)
