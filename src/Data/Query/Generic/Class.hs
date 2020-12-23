@@ -34,14 +34,14 @@ class
       :: cls a
       => QuerySchema cls a
 
+    querySchemaWith
+      :: Reflection.Typeable a
+      => Schema cls a
+      -> QuerySchema cls a
+
     schema
       :: cls a
       => Schema cls a
-
-    queryWith
-      :: SOP.All Reflection.Typeable xs
-      => Schema cls (SOP.NP SOP.I xs)
-      -> QuerySchema cls (SOP.NP SOP.I xs)
 
     mapSchema
       :: (b -> a)

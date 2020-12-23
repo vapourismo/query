@@ -264,9 +264,9 @@ instance Generic.SchemaFlavour HasEncoder where
 
   querySchema = GQueryEncoder encoder
 
-  schema = GEncoder encoder
+  querySchemaWith = GQueryEncoder . unGEncoder
 
-  queryWith = GQueryEncoder . unGEncoder
+  schema = GEncoder encoder
 
   mapSchema f _ (GEncoder a) = GEncoder $ contramap f a
 

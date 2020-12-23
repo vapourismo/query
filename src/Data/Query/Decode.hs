@@ -62,7 +62,6 @@ import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Query.Decode.Types as Types
 import qualified Data.Query.Generic as Generic
-import           Data.Query.Utilities (foldTypeRep)
 import qualified Data.SOP as SOP
 import           Data.Scientific (Scientific)
 import           Data.Text (Text)
@@ -254,12 +253,9 @@ instance Generic.SchemaFlavour HasDecoder where
 
   querySchema = GQuery query
 
-  schema = GDecoder decoder
+  querySchemaWith (GDecoder decoder) = GQuery $ queryWith decoder
 
-  queryWith (GDecoder (decoder :: Types.Decoder (SOP.NP SOP.I xs))) =
-    Reflection.withTypeable
-      (foldTypeRep @xs (SOP.hcpure (SOP.Proxy :: SOP.Proxy Reflection.Typeable) Reflection.typeRep))
-      (GQuery (queryWith decoder))
+  schema = GDecoder decoder
 
   mapSchema _ f decoder = GDecoder $ f <$> unGDecoder decoder
 

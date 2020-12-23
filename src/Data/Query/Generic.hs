@@ -49,6 +49,7 @@ import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (dimap))
 import qualified Data.Query.Generic.Class as Class
 import qualified Data.Query.Generic.Options as Options
+import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import qualified Data.SOP.NP as NP
 import           Data.Text (Text)
@@ -211,9 +212,11 @@ instance
             Class.variantWith $
               SOP.hczipWith
                 (SOP.Proxy :: SOP.Proxy (SOP.All Reflection.Typeable))
-                (\(ConstructorApplication run) info ->
-                  Class.constructorWith (Text.pack (Generics.constructorName info)) id id $
-                    Class.queryWith $ run info
+                (\(ConstructorApplication run) (info :: Generics.ConstructorInfo xs) ->
+                  Class.constructorWith (Text.pack (Generics.constructorName info)) id id
+                  $ Reflection.withTypeable (Utilities.typeReps @Type @xs)
+                  $ Class.querySchemaWith
+                  $ run info
                 )
                 (NP.trans_NP
                   (SOP.Proxy :: SOP.Proxy (GConstructor cls))

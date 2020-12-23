@@ -69,7 +69,6 @@ import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Generic as Generic
 import qualified Data.Query.Schema.Types as Types
-import           Data.Query.Utilities (foldTypeRep)
 import qualified Data.SOP as SOP
 import           Data.Scientific (Scientific)
 import           Data.Text (Text)
@@ -292,12 +291,9 @@ instance Generic.SchemaFlavour HasSchema where
 
   querySchema = GQuerySchema querySchema
 
-  schema = GSchema schema
+  querySchemaWith (GSchema schema) = GQuerySchema $ querySchemaWith schema
 
-  queryWith (GSchema schema :: Generic.Schema HasSchema (SOP.NP SOP.I xs)) =
-    Reflection.withTypeable
-      (foldTypeRep @xs (SOP.hcpure (SOP.Proxy :: SOP.Proxy Reflection.Typeable) Reflection.typeRep))
-      (GQuerySchema (querySchemaWith schema))
+  schema = GSchema schema
 
   mapSchema f g schema = GSchema $ dimap f g $ unGSchema schema
 
