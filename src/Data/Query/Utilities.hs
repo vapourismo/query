@@ -33,6 +33,7 @@ import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Reflection as Reflection
 import qualified Data.SOP as SOP
+import qualified Prettyprinter as Pretty
 import qualified Type.Reflection as Reflection
 
 newtype ContravariantCoyonedaShow f a = ContravariantCoyonedaShow (Contravariant.Coyoneda f a)
@@ -40,10 +41,16 @@ newtype ContravariantCoyonedaShow f a = ContravariantCoyonedaShow (Contravariant
 instance (forall x. Show (f x)) => Show (ContravariantCoyonedaShow f a) where
   show (ContravariantCoyonedaShow (Contravariant.Coyoneda _ item)) = show item
 
+instance (forall x. Pretty.Pretty (f x)) => Pretty.Pretty (ContravariantCoyonedaShow f a) where
+  pretty (ContravariantCoyonedaShow (Contravariant.Coyoneda _ item)) = Pretty.pretty item
+
 newtype CoyonedaShow f a = CoyonedaShow (Functor.Coyoneda f a)
 
 instance (forall x. Show (f x)) => Show (CoyonedaShow f a) where
   show (CoyonedaShow (Functor.Coyoneda _ item)) = show item
+
+instance (forall x. Pretty.Pretty (f x)) => Pretty.Pretty (CoyonedaShow f a) where
+  pretty (CoyonedaShow (Functor.Coyoneda _ item)) = Pretty.pretty item
 
 foldTypeRep
   :: forall k (ys :: [k])
