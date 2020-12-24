@@ -136,7 +136,7 @@ projectEncoderBase fixTarget@(Fix target) source =
         Contravariant.Coyoneda.liftCoyoneda source
 
 projectFieldEncoder
-  :: Shape.FieldShape
+  :: Shape.FieldShapeF Shape.Shape
   -> Types.FieldEncoder a
   -> Either LocatedProjectionError (Types.FieldEncoder a)
 projectFieldEncoder (Shape.FieldShapeF target optional) (Types.FieldEncoder sourceField) =

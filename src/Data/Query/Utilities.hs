@@ -21,14 +21,19 @@ module Data.Query.Utilities
   , PluggableShowEnv (..)
   , FunctorShow1 (..)
   , customLiftShowsPrec
+  , PrettyM
+  , runPrettyM
+  , recursePretty
   )
 where
 
 import           Control.Applicative.Free (Ap, hoistAp)
+import qualified Control.Monad.Reader as Reader
 import           Data.Coerce (Coercible, coerce)
 import qualified Data.Functor.Classes as Functor
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant
 import qualified Data.Functor.Coyoneda as Functor
+import qualified Data.HashSet as HashSet
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Reflection as Reflection
@@ -123,3 +128,19 @@ customLiftShowsPrec envShowsPrec envShowList prec (shape :: f a) =
       { pluggableShowEnv_showsPrec = coerce envShowsPrec
       , pluggableShowEnv_showList = coerce envShowList
       }
+
+type PrettyM ann = HashSet.HashSet Reflection.SomeTypeRep -> Pretty.Doc ann
+
+runPrettyM :: PrettyM ann -> Pretty.Doc ann
+runPrettyM action = action HashSet.empty
+
+recursePretty
+  :: Reflection.SomeTypeRep
+  -> PrettyM ann
+  -> PrettyM ann
+recursePretty typ action = do
+  env <- Reader.ask
+  if HashSet.member typ env then
+    pure $ Pretty.pretty $ "*breaking recursion: " <> show typ <> "*"
+  else
+    Reader.local (HashSet.insert typ) action
