@@ -108,20 +108,12 @@ newtype Schema a b = Schema
   { unSchema :: Coyoneda SchemaBase a b }
   deriving newtype Profunctor
 
-data QuerySchema a b
-  = DecodableSchema
+data QuerySchema a b = QuerySchema
     -- ^ Query for things that can be encoded and decoded
-    { querySchema_decodeType :: Reflection.TypeRep b
+    { querySchema_type :: Reflection.TypeRep b
     -- ^ Type of the thing to be decoded
-    , querySchema_schema :: Schema a b
-    -- ^ Schema for the things
-    }
-  | UndecodableSchema
-    -- ^ Query for something that can't be decoded
-    { querySchema_decodeType :: Reflection.TypeRep b
-    -- ^ Type of the thing to be decoded
-    , querySchema_encode :: Encode.Encoder a
-    -- ^ Encoder for the thing
+    , querySchema_schema :: Either (Encode.Encoder a) (Schema a b)
+    -- ^ Schema for undecodable or decodable @a@
     }
 
 -- | Path into an encoded 'Data.Query.Value.Value', 'Schema', 'Data.Query.Decode.Types.Decoder'

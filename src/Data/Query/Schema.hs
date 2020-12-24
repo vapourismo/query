@@ -145,7 +145,7 @@ querySchema :: HasSchema a => Types.QuerySchema a a
 querySchema = querySchemaWith schema
 
 querySchemaWith :: Reflection.Typeable b => Types.Schema a b -> Types.QuerySchema a b
-querySchemaWith = Types.DecodableSchema Reflection.typeRep
+querySchemaWith = Types.QuerySchema Reflection.typeRep . Right
 
 -- * Schemas
 
@@ -254,7 +254,7 @@ optionalFieldWith
 optionalFieldWith name querySchema f =
   lmap f $ liftFieldSchema $ Types.OptionalFieldSchema name querySchema
 
--- *
+-- * Generics
 
 deriving
   via Types.FieldsSchema a
@@ -321,12 +321,15 @@ genericFields
 genericFields options =
   unGFieldsSchema $ Generic.gFieldsSchema options
 
+-- * Shapes
+
 -- * Conversion
 
 querySchemaToEncoder :: Types.QuerySchema a b -> Encode.Encoder a
-querySchemaToEncoder = \case
-  Types.DecodableSchema _ schema    -> schemaToEncoder schema
-  Types.UndecodableSchema _ encoder -> encoder
+querySchemaToEncoder querySchema =
+  case Types.querySchema_schema querySchema of
+    Left encoder -> encoder
+    Right schema -> schemaToEncoder schema
 
 schemaToEncoder :: Types.Schema a b -> Encode.Encoder a
 schemaToEncoder (Types.Schema (Coyoneda f _ schemaBase)) =
@@ -384,12 +387,11 @@ schemaBaseToEncoder = \case
         fields
 
 querySchemaToQuery :: Types.QuerySchema a b -> Decode.Query b
-querySchemaToQuery = \case
-  Types.DecodableSchema typeRep schema ->
-    Reflection.withTypeable typeRep $ Decode.queryWith $ schemaToDecoder schema
-
-  Types.UndecodableSchema typeRep _ ->
-    Reflection.withTypeable typeRep Decode.undecodableQuery
+querySchemaToQuery querySchema =
+  Reflection.withTypeable (Types.querySchema_type querySchema) $
+    case Types.querySchema_schema querySchema of
+      Right schema -> Decode.queryWith $ schemaToDecoder schema
+      Left _ -> Decode.undecodableQuery
 
 schemaToDecoder :: Types.Schema a b -> Decode.Decoder b
 schemaToDecoder (Types.Schema (Coyoneda _ f schemaBase)) =
