@@ -104,8 +104,8 @@ instance Reflection.Given (PluggableShowEnv a) => Show (PluggableShow a) where
 newtype FunctorShow1 f a = FunctorShow1 (f a)
 
 instance
-  ( (forall x. Coercible (f x) (f (PluggableShow x)))
-  , (forall x. (Show x => Show (f x)))
+  ( forall x. Coercible (f x) (f (PluggableShow x))
+  , forall x. Show x => Show (f x)
   )
   => Functor.Show1 (FunctorShow1 f)
   where
@@ -113,7 +113,7 @@ instance
 
 customLiftShowsPrec
   :: ( Coercible (f a) (f (PluggableShow a))
-     , (forall x. (Show x => Show (f x)))
+     , forall x. Show x => Show (f x)
      )
   => (Int -> a -> ShowS)
   -> ([a] -> ShowS)

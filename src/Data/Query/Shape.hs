@@ -1,13 +1,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
@@ -35,11 +32,12 @@ import qualified Data.Query.Schema as Schema
 import qualified Data.Query.Utilities as Utilities
 import           Data.Text (Text)
 import           Data.Traversable (for)
-import           GHC.Generics (Generic)
 import qualified Generics.SOP as Generics
+import           GHC.Generics (Generic)
 import qualified Prettyprinter as Pretty
 import qualified Type.Reflection as Reflection
 
+-- | Shape of a field in a record
 data FieldShapeF a = FieldShapeF
   { fieldShape_schema :: a
   -- ^ Shape of the field value
@@ -77,6 +75,7 @@ instance Decode.HasDecoder a => Decode.HasDecoder (FieldShapeF a) where
 instance Schema.HasSchema a => Schema.HasSchema (FieldShapeF a) where
   schema = Schema.record
 
+-- | Shape of something
 data ShapeF a
   = Bool
   | Number
@@ -117,14 +116,22 @@ prettyShapeF = \case
 
     typed name typ = name Pretty.<+> Pretty.colon Pretty.<+> typ
 
+-- | Shape of something
 type Shape = Fix ShapeF
 
+-- | Make 'Shape' pretty.
 prettyShape :: Shape -> Pretty.Doc ann
 prettyShape = Utilities.runPrettyM . foldFix prettyShapeF
 
+instance Pretty.Pretty Shape where
+  pretty = prettyShape
+
+-- | Shape of something queryable
 data QueryShapeF a = QueryShape
   { queryShape_type :: Reflection.SomeTypeRep
+  -- ^ Type of the thing to query
   , queryShape_shape :: Maybe (ShapeF a)
+  -- ^ Optional shape of the thing to query for
   }
   deriving stock (Show, Generic, Functor, Foldable, Traversable)
   deriving Show1 via Utilities.FunctorShow1 QueryShapeF
@@ -136,7 +143,12 @@ prettyQueryShapeF (QueryShape typ shape) =
       Nothing -> pure $ Pretty.pretty $ show typ
       Just shape -> prettyShapeF shape
 
+-- | Shape of something queryable
 type QueryShape = Fix QueryShapeF
 
+-- | Make 'QueryShape' pretty.
 prettyQueryShape :: QueryShape -> Pretty.Doc ann
 prettyQueryShape = Utilities.runPrettyM . foldFix prettyQueryShapeF
+
+instance Pretty.Pretty QueryShape where
+  pretty = prettyQueryShape
