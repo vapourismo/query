@@ -6,7 +6,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 module Data.Query.Shape
   ( FieldShapeF (..)
@@ -25,10 +24,6 @@ import           Data.Fix (Fix (..), foldFix)
 import           Data.Functor.Classes (Show1 (..))
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Query.Decode as Decode
-import qualified Data.Query.Encode as Encode
-import qualified Data.Query.Generic as Generic
-import qualified Data.Query.Schema as Schema
 import qualified Data.Query.Utilities as Utilities
 import           Data.Text (Text)
 import           Data.Traversable (for)
@@ -48,33 +43,6 @@ data FieldShapeF a = FieldShapeF
   deriving anyclass (Generics.Generic, Generics.HasDatatypeInfo)
   deriving Show1 via Utilities.FunctorShow1 FieldShapeF
 
-deriving
-  via
-    Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] (FieldShapeF a)
-  instance
-    Encode.HasEncoder a => Encode.HasFieldsEncoder (FieldShapeF a)
-
-deriving
-  via
-    Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] (FieldShapeF a)
-  instance
-    Decode.HasDecoder a => Decode.HasFieldsDecoder (FieldShapeF a)
-
-deriving
-  via
-    Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] (FieldShapeF a)
-  instance
-    Schema.HasSchema a => Schema.HasFieldsSchema (FieldShapeF a)
-
-instance Encode.HasEncoder a => Encode.HasEncoder (FieldShapeF a) where
-  encoder = Encode.record
-
-instance Decode.HasDecoder a => Decode.HasDecoder (FieldShapeF a) where
-  decoder = Decode.record
-
-instance Schema.HasSchema a => Schema.HasSchema (FieldShapeF a) where
-  schema = Schema.record
-
 -- | Shape of something
 data ShapeF a
   = Bool
@@ -88,7 +56,6 @@ data ShapeF a
   | Record (HashMap Text (FieldShapeF a))
   deriving stock (Show, Generic, Functor, Foldable, Traversable)
   deriving anyclass (Generics.Generic, Generics.HasDatatypeInfo)
-  deriving (Encode.HasEncoder, Decode.HasDecoder, Schema.HasSchema) via Generic.Generic (ShapeF a)
   deriving Show1 via Utilities.FunctorShow1 ShapeF
 
 prettyShapeF :: ShapeF (Utilities.PrettyM ann) -> Utilities.PrettyM ann

@@ -59,11 +59,14 @@ import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix))
 import qualified Data.Functor.Coyoneda as Coyoneda
 import qualified Data.HashMap.Strict as HashMap
+import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Query.Decode.Types as Types
 import qualified Data.Query.Generic as Generic
-import qualified Data.SOP as SOP
+import qualified Data.Query.Shape as Shape
+import qualified Data.Query.Utilities as Utilities
 import           Data.Scientific (Scientific)
+import qualified Data.SOP as SOP
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
@@ -112,6 +115,11 @@ instance
   where
     decoder = coerce (generic @a (Generic.demoteOptions @options SOP.Proxy))
 
+instance HasDecoder a => HasDecoder (Shape.FieldShapeF a) where
+  decoder = record
+
+instance HasDecoder a => HasDecoder (Shape.ShapeF a)
+
 class HasFieldsDecoder a where
   fieldsDecoder :: Types.FieldsDecoder a
 
@@ -120,7 +128,6 @@ class HasFieldsDecoder a where
     => Types.FieldsDecoder a
   fieldsDecoder =
     genericFields Generic.defaultOptions
-
 
 instance HasFieldsDecoder () where
   fieldsDecoder = pure ()
@@ -135,6 +142,10 @@ instance
   => HasFieldsDecoder (Generic.CustomGeneric (options :: [k]) a)
   where
     fieldsDecoder = coerce (genericFields @a (Generic.demoteOptions @options SOP.Proxy))
+
+deriving
+  via Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] (Shape.FieldShapeF a)
+  instance HasDecoder a => HasFieldsDecoder (Shape.FieldShapeF a)
 
 -- * Queries
 
@@ -252,9 +263,14 @@ instance Generic.SchemaFlavour HasDecoder where
   newtype FieldsSchema HasDecoder _ b = GFieldsDecoder
     { unGFieldsDecoder :: Types.FieldsDecoder b }
 
+  type SupplementalClass HasDecoder = Reflection.Typeable
+
   querySchema = GQuery query
 
-  querySchemaWith (GDecoder decoder) = GQuery $ queryWith decoder
+  querySchemaWith (GDecoder (decoder :: Types.Decoder (SOP.NP SOP.I xs))) =
+    GQuery
+    $ Reflection.withTypeable (Utilities.typeReps @Type @xs)
+    $ queryWith decoder
 
   schema = GDecoder decoder
 

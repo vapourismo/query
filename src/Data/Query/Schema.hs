@@ -64,14 +64,17 @@ import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix), unFix)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.HashMap.Strict as HashMap
+import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (dimap), lmap)
 import           Data.Profunctor.Yoneda (Coyoneda (Coyoneda), returnCoyoneda)
 import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Generic as Generic
 import qualified Data.Query.Schema.Types as Types
-import qualified Data.SOP as SOP
+import qualified Data.Query.Shape as Shape
+import qualified Data.Query.Utilities as Utilities
 import           Data.Scientific (Scientific)
+import qualified Data.SOP as SOP
 import           Data.Text (Text)
 import qualified Data.Vector as Vector
 import qualified Type.Reflection as Reflection
@@ -119,6 +122,11 @@ instance
   where
     schema = coerce (generic @a (Generic.demoteOptions @options SOP.Proxy))
 
+instance HasSchema a => HasSchema (Shape.FieldShapeF a) where
+  schema = record
+
+instance HasSchema a => HasSchema (Shape.ShapeF a)
+
 class HasFieldsSchema a where
   fieldsSchema :: Types.FieldsSchema a a
 
@@ -138,6 +146,10 @@ instance
   => HasFieldsSchema (Generic.CustomGeneric (options :: [k]) a)
   where
     fieldsSchema = coerce (genericFields @a (Generic.demoteOptions @options SOP.Proxy))
+
+deriving
+  via Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] (Shape.FieldShapeF a)
+  instance HasSchema a => HasFieldsSchema (Shape.FieldShapeF a)
 
 -- * Query schemas
 
@@ -284,9 +296,14 @@ instance Generic.SchemaFlavour HasSchema where
   newtype FieldsSchema HasSchema a b = GFieldsSchema
     { unGFieldsSchema :: Types.FieldsSchema a b }
 
+  type SupplementalClass HasSchema = Reflection.Typeable
+
   querySchema = GQuerySchema querySchema
 
-  querySchemaWith (GSchema schema) = GQuerySchema $ querySchemaWith schema
+  querySchemaWith (GSchema (schema :: Types.Schema (SOP.NP SOP.I xs) (SOP.NP SOP.I xs))) =
+    GQuerySchema
+    $ Reflection.withTypeable (Utilities.typeReps @Type @xs)
+    $ querySchemaWith schema
 
   schema = GSchema schema
 

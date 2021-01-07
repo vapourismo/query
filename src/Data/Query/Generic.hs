@@ -49,7 +49,6 @@ import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (dimap))
 import qualified Data.Query.Generic.Class as Class
 import qualified Data.Query.Generic.Options as Options
-import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import qualified Data.SOP.NP as NP
 import           Data.Text (Text)
@@ -57,7 +56,6 @@ import qualified Data.Text as Text
 import qualified Generics.SOP as Generics
 import qualified Generics.SOP.Type.Metadata as Meta
 import           Numeric.Natural (Natural)
-import qualified Type.Reflection as Reflection
 
 -- * Utilities
 
@@ -198,7 +196,7 @@ newtype ConstructorApplication cls xs = ConstructorApplication
 instance
   {-# OVERLAPPABLE #-}
   ( SOP.AllZip (GConstructor cls) constructors xss
-  , SOP.All2 Reflection.Typeable xss
+  , SOP.All2 (Class.SupplementalClass cls) xss
   )
   => GDatatype cls ('Meta.ADT _m _d constructors _s) xss
   where
@@ -211,10 +209,9 @@ instance
           _ ->
             Class.variantWith $
               SOP.hczipWith
-                (SOP.Proxy :: SOP.Proxy (SOP.All Reflection.Typeable))
+                (SOP.Proxy :: SOP.Proxy (SOP.All (Class.SupplementalClass cls)))
                 (\(ConstructorApplication run) (info :: Generics.ConstructorInfo xs) ->
                   Class.constructorWith (Text.pack (Generics.constructorName info)) id id
-                  $ Reflection.withTypeable (Utilities.typeReps @Type @xs)
                   $ Class.querySchemaWith
                   $ run info
                 )

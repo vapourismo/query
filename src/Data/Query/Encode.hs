@@ -74,10 +74,12 @@ import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Query.Encode.Types as Types
 import qualified Data.Query.Generic as Generic
-import qualified Data.SOP as SOP
+import qualified Data.Query.Shape as Shape
 import           Data.Scientific (Scientific)
+import qualified Data.SOP as SOP
 import           Data.Text (Text)
 import qualified Data.Vector as Vector
+import qualified Type.Reflection as Reflection
 
 -- * Classes
 
@@ -120,6 +122,12 @@ instance
   where
     encoder = coerce (generic @a (Generic.demoteOptions @options SOP.Proxy))
 
+instance HasEncoder a => HasEncoder (Shape.FieldShapeF a) where
+  encoder = record
+
+instance (HasEncoder a, Reflection.Typeable a) => HasEncoder (Shape.ShapeF a) where
+  encoder = generic Generic.defaultOptions
+
 class HasFieldsEncoder a where
   fieldsEncoder :: HashMap.HashMap Text (Types.FieldEncoder a)
 
@@ -139,6 +147,10 @@ instance
   => HasFieldsEncoder (Generic.CustomGeneric options a)
   where
     fieldsEncoder = coerce (genericFields @a (Generic.demoteOptions @options SOP.Proxy))
+
+deriving
+  via Generic.CustomGeneric '[Generic.TrimFieldTillUnderscore] (Shape.FieldShapeF a)
+  instance HasEncoder a => HasFieldsEncoder (Shape.FieldShapeF a)
 
 -- * Encoders
 
@@ -266,6 +278,8 @@ instance Generic.SchemaFlavour HasEncoder where
   newtype FieldsSchema HasEncoder a b = GFieldsEncoder
     { unGFieldsEncoder :: Ap (FieldEncoderWrap a) b }
 
+  type SupplementalClass HasEncoder = SOP.Top
+
   querySchema = GQueryEncoder encoder
 
   querySchemaWith = GQueryEncoder . unGEncoder
@@ -312,4 +326,3 @@ genericFields options =
   runAp_
     (\(FieldEncoderWrap name encoder) -> HashMap.singleton name encoder)
     (unGFieldsEncoder (Generic.gFieldsSchema options))
-

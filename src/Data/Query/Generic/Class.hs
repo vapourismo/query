@@ -12,7 +12,6 @@ import           Data.Kind (Constraint, Type)
 import           Data.Profunctor (Profunctor)
 import qualified Data.SOP as SOP
 import           Data.Text (Text)
-import qualified Type.Reflection as Reflection
 
 class
   ( forall x. Applicative (FieldsSchema cls x)
@@ -30,14 +29,16 @@ class
 
     data FieldsSchema cls :: Type -> Type -> Type
 
+    type SupplementalClass cls :: forall k. k -> Constraint
+
     querySchema
       :: cls a
       => QuerySchema cls a
 
     querySchemaWith
-      :: Reflection.Typeable a
-      => Schema cls a
-      -> QuerySchema cls a
+      :: SOP.All (SupplementalClass cls) xs
+      => Schema cls (SOP.NP SOP.I xs)
+      -> QuerySchema cls (SOP.NP SOP.I xs)
 
     schema
       :: cls a
