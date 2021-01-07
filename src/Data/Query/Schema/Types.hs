@@ -7,7 +7,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 {-# OPTIONS_HADDOCK hide #-}
 
@@ -28,13 +27,12 @@ import qualified Generics.SOP as Generics
 import qualified Type.Reflection as Reflection
 
 -- | Schema for a variant constructor
-data ConstructorSchema f a where
-  ConstructorSchema
-    :: Text
+data ConstructorSchema f a = ConstructorSchema
+  { constructorSchema_name :: Text
     -- ^ Constructor name
-    -> Coyoneda QuerySchema (f a) (f a)
+  , constructorSchema_schema :: Coyoneda QuerySchema (f a) (f a)
     -- ^ Constructor value schema
-    -> ConstructorSchema f a
+  }
 
 -- | Schema of a field of type @b@ from a record @a@
 data FieldSchema a b where
@@ -59,8 +57,8 @@ newtype FieldsSchema a b = FieldsSchema
   deriving newtype (Functor, Applicative)
   deriving Profunctor via Utilities.ApCoyoneda FieldSchema
 
+-- | Enum item
 data ItemSchema f a = ItemSchema
-  -- ^ Enum item
   { itemSchema_identifier :: Text
   -- ^ Enum value identifier
   , itemSchema_value :: f a
@@ -108,13 +106,13 @@ newtype Schema a b = Schema
   { unSchema :: Coyoneda SchemaBase a b }
   deriving newtype Profunctor
 
+-- | Query for things that can be encoded and decoded
 data QuerySchema a b = QuerySchema
-    -- ^ Query for things that can be encoded and decoded
-    { querySchema_type :: Reflection.TypeRep b
-    -- ^ Type of the thing to be decoded
-    , querySchema_schema :: Either (Encode.Encoder a) (Schema a b)
-    -- ^ Schema for undecodable or decodable @a@
-    }
+  { querySchema_type :: Reflection.TypeRep b
+  -- ^ Type of the thing to be decoded
+  , querySchema_schema :: Either (Encode.Encoder a) (Schema a b)
+  -- ^ Schema for undecodable or decodable @a@
+  }
 
 -- | Path into an encoded 'Data.Query.Value.Value', 'Schema', 'Data.Query.Decode.Types.Decoder'
 -- or 'Data.Query.Encode.Types.Encoder'
