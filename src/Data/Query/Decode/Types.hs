@@ -22,20 +22,13 @@ import qualified Data.Text as Text
 import           Data.Vector (Vector)
 import qualified Type.Reflection as Reflection
 
-data Query a where
-  DecodableQuery
-    :: Reflection.TypeRep a
-    -> Decoder a
-    -> Query a
-
-  UndecodableQuery
-    :: Reflection.TypeRep a
-    -> Query a
+data Query a = Query
+  { query_type :: Reflection.TypeRep a
+  , query_schema :: Maybe (Decoder a)
+  }
 
 instance Show (Query a) where
-  show = \case
-    DecodableQuery typ _decoder -> show typ
-    UndecodableQuery typ -> show typ
+  show = show . query_type
 
 newtype ConstructorQuery a = ConstructorQuery
   { unConstructorQuery :: Coyoneda Query a }

@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
@@ -143,15 +142,13 @@ query :: HasDecoder a => Types.Query a
 query = queryWith decoder
 
 queryWith :: Reflection.Typeable a => Types.Decoder a -> Types.Query a
-queryWith = Types.DecodableQuery Reflection.typeRep
+queryWith = Types.Query Reflection.typeRep . Just
 
 undecodableQuery :: Reflection.Typeable a => Types.Query a
-undecodableQuery = Types.UndecodableQuery Reflection.typeRep
+undecodableQuery = Types.Query Reflection.typeRep Nothing
 
 queryType :: Types.Query a -> Reflection.TypeRep a
-queryType = \case
-  Types.DecodableQuery typeRep _ -> typeRep
-  Types.UndecodableQuery typeRep -> typeRep
+queryType = Types.query_type
 
 -- * Decoders
 

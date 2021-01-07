@@ -138,14 +138,14 @@ evalQuery
   => Decode.Query a
   -> Value.Value
   -> Evaluate.Evaluate m a
-evalQuery = \case
-  Types.DecodableQuery typeRep decoder -> \case
-    Value.Call (Value.CallValue name args) -> Evaluate.callFunction typeRep name args
-    Value.NoCall queryValue -> evalDecoder decoder queryValue
+evalQuery (Types.Query typeRep mbDecoder) = \case
+  Value.Call (Value.CallValue name args) ->
+    Evaluate.callFunction typeRep name args
 
-  Types.UndecodableQuery typeRep -> \case
-    Value.Call (Value.CallValue name args) -> Evaluate.callFunction typeRep name args
-    Value.NoCall queryValue -> throwError $ Types.UndecodableNeedsCall typeRep queryValue
+  Value.NoCall queryValue ->
+    case mbDecoder of
+      Just decoder -> evalDecoder decoder queryValue
+      Nothing -> throwError $ Types.UndecodableNeedsCall typeRep queryValue
 
 aesonResolver :: Evaluate.Resolver Aeson.Parser
 aesonResolver =
