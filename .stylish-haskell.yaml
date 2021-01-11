@@ -255,6 +255,7 @@ newline: native
 # No language extensions are enabled by default.
 language_extensions:
   - TypeOperators
+  - ExistentialQuantification
 
 # Attempt to find the cabal file in ancestors of the current directory, and
 # parse options (currently only language extensions) from that.
