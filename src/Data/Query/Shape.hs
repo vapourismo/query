@@ -27,13 +27,13 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Query.Utilities as Utilities
 import           Data.Text (Text)
 import           Data.Traversable (for)
-import qualified Generics.SOP as Generics
 import           GHC.Generics (Generic)
+import qualified Generics.SOP as Generics
 import qualified Prettyprinter as Pretty
 import qualified Type.Reflection as Reflection
 
 -- | Shape of a field in a record
-data FieldShapeF a = FieldShapeF
+data FieldShapeF a = FieldShape
   { fieldShape_schema :: a
   -- ^ Shape of the field value
   , fieldShape_optional :: Bool
@@ -72,7 +72,7 @@ prettyShapeF = \case
   Variant constructors ->
     inAngles . map (uncurry (typed . Pretty.pretty)) . HashMap.toList <$> sequenceA constructors
   Record fields -> do
-    fields <- for (HashMap.toList fields) $ \(name, FieldShapeF typ optional) -> do
+    fields <- for (HashMap.toList fields) $ \(name, FieldShape typ optional) -> do
       let questionMark = if optional then Pretty.pretty "?" else mempty
       typed (Pretty.pretty name <> questionMark) <$> typ
     pure $ inBraces fields

@@ -139,7 +139,7 @@ projectFieldEncoder
   :: Shape.FieldShapeF Shape.Shape
   -> Types.FieldEncoder a
   -> Either LocatedProjectionError (Types.FieldEncoder a)
-projectFieldEncoder (Shape.FieldShapeF target optional) (Types.FieldEncoder sourceField) =
+projectFieldEncoder (Shape.FieldShape target optional) (Types.FieldEncoder sourceField) =
   case sourceField of
     Contravariant.Coyoneda.Coyoneda f sourceSelector -> do
       let rewrap = Types.FieldEncoder . Contravariant.Coyoneda.Coyoneda f

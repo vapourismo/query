@@ -63,12 +63,12 @@ deriving instance Show (FieldQuery a)
 
 fieldQueryToFieldShape :: FieldQuery a -> HashMap.HashMap Text (Shape.FieldShapeF Shape.QueryShape)
 fieldQueryToFieldShape = \case
-  MandatoryFieldQuery name query -> HashMap.singleton name Shape.FieldShapeF
+  MandatoryFieldQuery name query -> HashMap.singleton name Shape.FieldShape
     { Shape.fieldShape_schema = queryToShape query
     , Shape.fieldShape_optional = False
     }
 
-  OptionalFieldQuery name query -> HashMap.singleton name Shape.FieldShapeF
+  OptionalFieldQuery name query -> HashMap.singleton name Shape.FieldShape
     { Shape.fieldShape_schema = queryToShape query
     , Shape.fieldShape_optional = True
     }
