@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
@@ -44,6 +45,11 @@ module Data.Query.Decode
   , record
   , recordWith
 
+  , querySchemaQuery
+  , querySchemaQueryWith
+  , schemaDecoder
+  , schemaDecoderWith
+
   , HasFieldsDecoder (..)
   , Types.FieldsDecoder
   , genericFields
@@ -54,19 +60,22 @@ module Data.Query.Decode
   )
 where
 
-import           Control.Applicative.Free (liftAp)
+import           Control.Applicative.Free (liftAp, runAp)
 import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix))
 import qualified Data.Functor.Coyoneda as Coyoneda
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (..))
+import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Query.Decode.Types as Types
 import qualified Data.Query.Generic as Generic
+import qualified Data.Query.Schema as Schema
+import qualified Data.Query.Schema.Types as Schema
 import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
-import           Data.Scientific (Scientific)
 import qualified Data.SOP as SOP
+import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
@@ -234,6 +243,76 @@ optionalField name = optionalFieldWith name query
 
 optionalFieldWith :: Text -> Types.Query a -> Types.FieldsDecoder (Maybe a)
 optionalFieldWith name query = Types.FieldsDecoder $ liftAp $ Types.OptionalFieldQuery name query
+
+-- * Schema derivation
+
+querySchemaQuery :: Schema.HasSchema a => Types.Query a
+querySchemaQuery = querySchemaQueryWith Schema.querySchema
+
+querySchemaQueryWith :: Schema.QuerySchema a b -> Types.Query b
+querySchemaQueryWith querySchema =
+  Reflection.withTypeable (Schema.querySchema_type querySchema) $
+    case Schema.querySchema_schema querySchema of
+      Right schema -> queryWith $ schemaDecoderWith schema
+      Left _ -> undecodableQuery
+
+schemaDecoder :: Schema.HasSchema a => Types.Decoder a
+schemaDecoder = schemaDecoderWith Schema.schema
+
+schemaDecoderWith :: Schema.Schema a b -> Types.Decoder b
+schemaDecoderWith (Schema.Schema (Profunctor.Coyoneda _ f schemaBase)) =
+  f <$> schemaBaseDecoderWith schemaBase
+
+schemaBaseDecoderWith :: Schema.SchemaBase a b -> Types.Decoder b
+schemaBaseDecoderWith = \case
+  Schema.BoolSchema ->
+    bool
+
+  Schema.NumberSchema ->
+    number
+
+  Schema.StringSchema ->
+    string
+
+  Schema.NullableSchema schema ->
+    nullableWith $ schemaDecoderWith schema
+
+  Schema.ArraySchema schema ->
+    arrayWith $ querySchemaQueryWith schema
+
+  Schema.StringMapSchema schema ->
+    stringMapWith $ querySchemaQueryWith schema
+
+  Schema.EnumSchema items ->
+    enumWith $ HashMap.fromList $ SOP.hcollapse $
+      SOP.hzipWith
+        (\(Schema.ItemSchema name value) (SOP.Fn mkEnum) -> SOP.K (name, SOP.unK (mkEnum value)))
+        items
+        SOP.injections
+
+  Schema.VariantSchema constructors ->
+    variantWith $ HashMap.fromList $ SOP.hcollapse $
+      SOP.hzipWith
+        (\(Schema.ConstructorSchema name (Profunctor.Coyoneda _ lift schema)) (SOP.Fn construct) -> do
+          let query = querySchemaQueryWith schema
+          let mkValue = SOP.unK . construct . lift
+          SOP.K (name, constructorWith query mkValue)
+        )
+        constructors
+        SOP.injections
+
+  Schema.RecordSchema fields ->
+    recordWith $
+      runAp
+        (\(Profunctor.Coyoneda _ g fieldSchema) ->
+          case fieldSchema of
+            Schema.MandatoryFieldSchema name schema ->
+              fmap g $ fieldWith name $ querySchemaQueryWith schema
+
+            Schema.OptionalFieldSchema name schema ->
+              fmap g $ optionalFieldWith name $ querySchemaQueryWith schema
+        )
+        (Schema.unFieldsSchema fields)
 
 -- * Generics
 

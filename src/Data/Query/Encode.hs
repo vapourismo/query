@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
@@ -62,6 +63,12 @@ module Data.Query.Encode
   , fieldWith
   , optionalField
   , optionalFieldWith
+
+  -- * Schema derivation
+  , querySchemaEncoder
+  , querySchemaEncoderWith
+  , schemaEncoder
+  , schemaEncoderWith
   )
 where
 
@@ -72,11 +79,14 @@ import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (..))
+import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Query.Encode.Types as Types
 import qualified Data.Query.Generic as Generic
+import qualified Data.Query.Schema as Schema
+import qualified Data.Query.Schema.Types as Schema
 import qualified Data.Query.Shape as Shape
-import           Data.Scientific (Scientific)
 import qualified Data.SOP as SOP
+import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import qualified Data.Vector as Vector
 import qualified Type.Reflection as Reflection
@@ -236,6 +246,75 @@ record = recordWith fieldsEncoder
 
 recordWith :: HashMap.HashMap Text (Types.FieldEncoder a) -> Types.Encoder a
 recordWith = liftBase . Types.RecordEncoder
+
+-- * Schema derivation
+
+querySchemaEncoder :: Schema.HasSchema a => Types.Encoder a
+querySchemaEncoder = querySchemaEncoderWith Schema.querySchema
+
+querySchemaEncoderWith :: Schema.QuerySchema a b -> Types.Encoder a
+querySchemaEncoderWith querySchema =
+  case Schema.querySchema_schema querySchema of
+    Left encoder -> encoder
+    Right schema -> schemaEncoderWith schema
+
+schemaEncoder :: Schema.HasSchema a => Types.Encoder a
+schemaEncoder = schemaEncoderWith Schema.schema
+
+schemaEncoderWith :: Schema.Schema a b -> Types.Encoder a
+schemaEncoderWith (Schema.Schema (Profunctor.Coyoneda f _ schemaBase)) =
+  contramap f $ schemaBaseEncoderWith schemaBase
+
+schemaBaseEncoderWith :: Schema.SchemaBase a b -> Types.Encoder a
+schemaBaseEncoderWith = \case
+  Schema.BoolSchema ->
+    bool
+
+  Schema.NumberSchema ->
+    number
+
+  Schema.StringSchema ->
+    string
+
+  Schema.NullableSchema schema ->
+    nullableWith $ schemaEncoderWith schema
+
+  Schema.ArraySchema schema ->
+    arrayWith $ querySchemaEncoderWith schema
+
+  Schema.StringMapSchema schema ->
+    stringMapWith $ querySchemaEncoderWith schema
+
+  Schema.EnumSchema items ->
+    enumWith $
+      SOP.hmap
+        (\(Schema.ItemSchema name _) -> item name)
+        items
+
+  Schema.VariantSchema constructors ->
+    variantWith $
+      SOP.hmap
+        (\(Schema.ConstructorSchema name (Profunctor.Coyoneda extract _ schema)) ->
+          constructorWith name (contramap extract (querySchemaEncoderWith schema))
+        )
+        constructors
+
+  Schema.RecordSchema (Schema.FieldsSchema fields) ->
+    recordWith $
+      runAp_
+        (\(Profunctor.Coyoneda f _ fieldSchema) ->
+          case fieldSchema of
+            Schema.MandatoryFieldSchema name schema ->
+              HashMap.singleton name
+              $ fieldWith f
+              $ querySchemaEncoderWith schema
+
+            Schema.OptionalFieldSchema name schema ->
+              HashMap.singleton name
+              $ optionalFieldWith f
+              $ querySchemaEncoderWith schema
+        )
+        fields
 
 -- * Generics
 

@@ -16,7 +16,7 @@ import           Control.Applicative.Free (Ap)
 import           Data.HashMap.Strict (HashMap)
 import           Data.Profunctor (Profunctor (..))
 import           Data.Profunctor.Yoneda (Coyoneda (..))
-import qualified Data.Query.Encode as Encode
+import qualified Data.Query.Encode.Types as Encode
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import           Data.Scientific (Scientific)

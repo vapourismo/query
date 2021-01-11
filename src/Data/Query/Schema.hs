@@ -51,30 +51,22 @@ module Data.Query.Schema
   , fieldWith
   , optionalField
   , optionalFieldWith
-
-  , querySchemaToEncoder
-  , schemaToEncoder
-  , querySchemaToQuery
-  , schemaToDecoder
   )
 where
 
-import           Control.Applicative.Free (liftAp, runAp, runAp_)
+import           Control.Applicative.Free (liftAp)
 import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix), unFix)
-import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (dimap), lmap)
 import           Data.Profunctor.Yoneda (Coyoneda (Coyoneda), returnCoyoneda)
-import qualified Data.Query.Decode as Decode
-import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Generic as Generic
 import qualified Data.Query.Schema.Types as Types
 import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
-import           Data.Scientific (Scientific)
 import qualified Data.SOP as SOP
+import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import qualified Data.Vector as Vector
 import qualified Type.Reflection as Reflection
@@ -337,130 +329,3 @@ genericFields
   -> Types.FieldsSchema a a
 genericFields options =
   unGFieldsSchema $ Generic.gFieldsSchema options
-
--- * Shapes
-
--- * Conversion
-
-querySchemaToEncoder :: Types.QuerySchema a b -> Encode.Encoder a
-querySchemaToEncoder querySchema =
-  case Types.querySchema_schema querySchema of
-    Left encoder -> encoder
-    Right schema -> schemaToEncoder schema
-
-schemaToEncoder :: Types.Schema a b -> Encode.Encoder a
-schemaToEncoder (Types.Schema (Coyoneda f _ schemaBase)) =
-  contramap f $ schemaBaseToEncoder schemaBase
-
-schemaBaseToEncoder :: Types.SchemaBase a b -> Encode.Encoder a
-schemaBaseToEncoder = \case
-  Types.BoolSchema ->
-    Encode.bool
-
-  Types.NumberSchema ->
-    Encode.number
-
-  Types.StringSchema ->
-    Encode.string
-
-  Types.NullableSchema schema ->
-    Encode.nullableWith $ schemaToEncoder schema
-
-  Types.ArraySchema schema ->
-    Encode.arrayWith $ querySchemaToEncoder schema
-
-  Types.StringMapSchema schema ->
-    Encode.stringMapWith $ querySchemaToEncoder schema
-
-  Types.EnumSchema items ->
-    Encode.enumWith $
-      SOP.hmap
-        (\(Types.ItemSchema name _) -> Encode.item name)
-        items
-
-  Types.VariantSchema constructors ->
-    Encode.variantWith $
-      SOP.hmap
-        (\(Types.ConstructorSchema name (Coyoneda extract _ schema)) ->
-          Encode.constructorWith name (contramap extract (querySchemaToEncoder schema))
-        )
-        constructors
-
-  Types.RecordSchema (Types.FieldsSchema fields) ->
-    Encode.recordWith $
-      runAp_
-        (\(Coyoneda f _ fieldSchema) ->
-          case fieldSchema of
-            Types.MandatoryFieldSchema name schema ->
-              HashMap.singleton name
-              $ Encode.fieldWith f
-              $ querySchemaToEncoder schema
-
-            Types.OptionalFieldSchema name schema ->
-              HashMap.singleton name
-              $ Encode.optionalFieldWith f
-              $ querySchemaToEncoder schema
-        )
-        fields
-
-querySchemaToQuery :: Types.QuerySchema a b -> Decode.Query b
-querySchemaToQuery querySchema =
-  Reflection.withTypeable (Types.querySchema_type querySchema) $
-    case Types.querySchema_schema querySchema of
-      Right schema -> Decode.queryWith $ schemaToDecoder schema
-      Left _ -> Decode.undecodableQuery
-
-schemaToDecoder :: Types.Schema a b -> Decode.Decoder b
-schemaToDecoder (Types.Schema (Coyoneda _ f schemaBase)) =
-  f <$> schemaBaseToDecoder schemaBase
-
-schemaBaseToDecoder :: Types.SchemaBase a b -> Decode.Decoder b
-schemaBaseToDecoder = \case
-  Types.BoolSchema ->
-    Decode.bool
-
-  Types.NumberSchema ->
-    Decode.number
-
-  Types.StringSchema ->
-    Decode.string
-
-  Types.NullableSchema schema ->
-    Decode.nullableWith $ schemaToDecoder schema
-
-  Types.ArraySchema schema ->
-    Decode.arrayWith $ querySchemaToQuery schema
-
-  Types.StringMapSchema schema ->
-    Decode.stringMapWith $ querySchemaToQuery schema
-
-  Types.EnumSchema items ->
-    Decode.enumWith $ HashMap.fromList $ SOP.hcollapse $
-      SOP.hzipWith
-        (\(Types.ItemSchema name value) (SOP.Fn mkEnum) -> SOP.K (name, SOP.unK (mkEnum value)))
-        items
-        SOP.injections
-
-  Types.VariantSchema constructors ->
-    Decode.variantWith $ HashMap.fromList $ SOP.hcollapse $
-      SOP.hzipWith
-        (\(Types.ConstructorSchema name (Coyoneda _ lift schema)) (SOP.Fn construct) -> do
-          let query = querySchemaToQuery schema
-          let mkValue = SOP.unK . construct . lift
-          SOP.K (name, Decode.constructorWith query mkValue)
-        )
-        constructors
-        SOP.injections
-
-  Types.RecordSchema fields ->
-    Decode.recordWith $
-      runAp
-        (\(Coyoneda _ g fieldSchema) ->
-          case fieldSchema of
-            Types.MandatoryFieldSchema name schema ->
-              fmap g $ Decode.fieldWith name $ querySchemaToQuery schema
-
-            Types.OptionalFieldSchema name schema ->
-              fmap g $ Decode.optionalFieldWith name $ querySchemaToQuery schema
-        )
-        (Types.unFieldsSchema fields)
