@@ -378,10 +378,18 @@ instance Generic.SchemaFlavour HasEncoder where
         (unGFieldsEncoder fields)
 
   fieldWith name encoder access =
-    GFieldsEncoder $ liftAp $ FieldEncoderWrap name $ fieldWith access $ unGQueryEncoder encoder
+    GFieldsEncoder
+    $ liftAp
+    $ FieldEncoderWrap name
+    $ fieldWith access
+    $ unGQueryEncoder encoder
 
   optionalFieldWith name encoder access =
-    GFieldsEncoder $ liftAp $ FieldEncoderWrap name $ optionalFieldWith access $ unGQueryEncoder encoder
+    GFieldsEncoder
+    $ liftAp
+    $ FieldEncoderWrap name
+    $ optionalFieldWith access
+    $ unGQueryEncoder encoder
 
   item name _ = GItemEncoder $ item name
 

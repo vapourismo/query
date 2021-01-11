@@ -9,10 +9,13 @@
 
 module Data.Query.Encode.Types where
 
+import           Control.Arrow (Arrow ((&&&)))
+import           Data.Fix (Fix (Fix, unFix))
 import           Data.Functor.Contravariant (Contravariant (..))
-import           Data.Functor.Contravariant.Coyoneda (Coyoneda)
+import           Data.Functor.Contravariant.Coyoneda (Coyoneda (..))
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.List as List
+import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import           Data.Scientific (Scientific)
@@ -50,6 +53,19 @@ newtype FieldEncoder a = FieldEncoder
   { unFieldEncoder :: Coyoneda FieldSelector a }
   deriving newtype Contravariant
   deriving Show via Utilities.ContravariantCoyonedaShow FieldSelector a
+
+fieldEncoderToFieldShape :: FieldEncoder a -> Shape.FieldShapeF Shape.Shape
+fieldEncoderToFieldShape (FieldEncoder (Coyoneda _ selector)) =
+  case selector of
+    MandatoryFieldSelector encoder -> Shape.FieldShape
+      { Shape.fieldShape_schema = encoderToShape encoder
+      , Shape.fieldShape_optional = False
+      }
+
+    OptionalFieldSelector encoder -> Shape.FieldShape
+      { Shape.fieldShape_schema = encoderToShape encoder
+      , Shape.fieldShape_optional = True
+      }
 
 data EncoderBase a where
   BoolEncoder
@@ -128,7 +144,29 @@ instance Show (EncoderBase a) where
       , " }"
       ]
 
+encoderBaseToShape :: EncoderBase a -> Shape.Shape
+encoderBaseToShape = Fix . \case
+  BoolEncoder -> Shape.Bool
+  NumberEncoder -> Shape.Number
+  StringEncoder -> Shape.String
+  NullableEncoder encoder -> Shape.Nullable $ unFix $ encoderToShape encoder
+  ArrayEncoder encoder -> Shape.Array $ encoderToShape encoder
+  StringMapEncoder encoder -> Shape.StringMap $ encoderToShape encoder
+  EnumEncoder items -> Shape.Enum $ SOP.hcollapse $ SOP.hmap (SOP.K . itemEncoder_name) items
+  VariantEncoder constructors ->
+    Shape.Variant
+    $ HashMap.fromList
+    $ SOP.hcollapse
+    $ SOP.hmap
+        (SOP.K . (constructorEncoder_name &&& encoderToShape . constructorEncoder_value))
+        constructors
+  RecordEncoder fields ->
+    Shape.Record $ HashMap.map fieldEncoderToFieldShape fields
+
 newtype Encoder a = Encoder
   { unEncoder :: Coyoneda EncoderBase a }
   deriving newtype Contravariant
   deriving Show via Utilities.ContravariantCoyonedaShow EncoderBase a
+
+encoderToShape :: Encoder a -> Shape.Shape
+encoderToShape (Encoder (Coyoneda _ base)) = encoderBaseToShape base
