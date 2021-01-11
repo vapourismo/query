@@ -85,7 +85,8 @@ instance Pretty.Pretty (FieldsDecoder a) where
     Utilities.runPrettyM
     . Shape.prettyShapeF
     . fmap (foldFix Shape.prettyQueryShapeF)
-    . Shape.Record . fieldDecoderToFieldShapes
+    . Shape.Record
+    . fieldDecoderToFieldShapes
 
 fieldDecoderToFieldShapes :: FieldsDecoder b -> HashMap.HashMap Text (Shape.FieldShapeF Shape.QueryShape)
 fieldDecoderToFieldShapes = runAp_ fieldQueryToFieldShape . unFieldDecoder

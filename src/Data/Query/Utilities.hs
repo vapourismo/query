@@ -14,6 +14,7 @@
 module Data.Query.Utilities
   ( ContravariantCoyonedaShow (..)
   , CoyonedaShow (..)
+  , ProfunctorCoyonedaShow (..)
   , foldTypeRep
   , typeReps
   , ApCoyoneda (..)
@@ -56,6 +57,14 @@ instance (forall x. Show (f x)) => Show (CoyonedaShow f a) where
 
 instance (forall x. Pretty.Pretty (f x)) => Pretty.Pretty (CoyonedaShow f a) where
   pretty (CoyonedaShow (Functor.Coyoneda _ item)) = Pretty.pretty item
+
+newtype ProfunctorCoyonedaShow p a b = ProfunctorCoyonedaShow (Profunctor.Coyoneda p a b)
+
+instance (forall x y. Show (p x y)) => Show (ProfunctorCoyonedaShow p a b) where
+  show (ProfunctorCoyonedaShow (Profunctor.Coyoneda _ _ item)) = show item
+
+instance (forall x y. Pretty.Pretty (p x y)) => Pretty.Pretty (ProfunctorCoyonedaShow p a b) where
+  pretty (ProfunctorCoyonedaShow (Profunctor.Coyoneda _ _ item)) = Pretty.pretty item
 
 foldTypeRep
   :: forall k (ys :: [k])
