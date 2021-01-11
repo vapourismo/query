@@ -179,7 +179,8 @@ nullable :: HasDecoder a => Types.Decoder (Maybe a)
 nullable = nullableWith decoder
 
 nullableWith :: Types.Decoder a -> Types.Decoder (Maybe a)
-nullableWith = liftBase . Types.NullableDecoder
+nullableWith (Types.Decoder (Coyoneda.Coyoneda f base)) =
+  Types.Decoder $ Coyoneda.Coyoneda (fmap f) $ Types.NullableDecoder base
 
 array :: HasDecoder a => Types.Decoder (Vector.Vector a)
 array = arrayWith query

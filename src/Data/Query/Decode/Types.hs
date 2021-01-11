@@ -69,7 +69,7 @@ data DecoderBase a where
     :: DecoderBase Text
 
   NullableDecoder
-    :: Decoder a
+    :: DecoderBase a
     -> DecoderBase (Maybe a)
 
   ArrayDecoder

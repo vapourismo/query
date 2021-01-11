@@ -86,7 +86,7 @@ evalDecoderBase decoder queryValue =
     Types.NullableDecoder decoder ->
       case queryValue of
         Value.Null -> pure Nothing
-        queryValue -> Just <$> evalDecoder decoder queryValue
+        queryValue -> Just <$> evalDecoderBase decoder queryValue
 
     Types.ArrayDecoder decoder ->
       case queryValue of
