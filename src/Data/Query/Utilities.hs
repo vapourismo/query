@@ -8,6 +8,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -25,6 +26,7 @@ module Data.Query.Utilities
   , PrettyM
   , runPrettyM
   , recursePretty
+  , instantiateProduct
   )
 where
 
@@ -153,3 +155,10 @@ recursePretty typ action = do
     pure $ Pretty.pretty $ "*breaking recursion: " <> show typ <> "*"
   else
     Reader.local (HashSet.insert typ) action
+
+instantiateProduct
+  :: [a]
+  -> (forall xs. SOP.All ((~) a) xs => SOP.NP (SOP.K a) xs -> r)
+  -> r
+instantiateProduct [] f = f SOP.Nil
+instantiateProduct (x : xs) f = instantiateProduct xs $ \tail -> f $ SOP.K x SOP.:* tail
