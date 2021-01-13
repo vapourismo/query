@@ -1,0 +1,69 @@
+name: Haskell Integration
+
+on:
+  push: {}
+
+  pull_request:
+    branches:
+      - master
+
+  schedule:
+    - cron: "0 8 * * *"
+
+jobs:
+  BuildAndTest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc:
+          - latest
+          - "8.10.3"
+          - "8.8.4"
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: haskell/actions/setup@v1.1.5
+        with:
+          ghc-version: ${{ matrix.ghc }}
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/.cabal
+          key: cabal-root-${{ matrix.ghc }}
+
+      - name: Update Hackage snapshot
+        run: cabal update
+
+      - name: Configure library
+        run: cabal configure --enable-documentation --enable-tests --disable-optimization
+
+      - name: Build dependencies
+        run: cabal build --dependencies-only
+
+      - name: Build library
+        run: cabal build
+
+      - name: Run tests
+        run: cabal test
+
+  HLint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: haskell/actions/setup@v1.1.5
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/.cabal
+          key: cabal-root-latest
+
+      - name: Update Hackage snapshot
+        run: cabal update
+
+      - name: Install HLint
+        run: cabal install --installdir=. hlint --constraint 'hlint >= 3.2'
+
+      - name: Run HLint
+        run: ./hlint src
