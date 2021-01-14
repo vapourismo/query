@@ -37,6 +37,7 @@ module Data.Query.Encode
   , stringMapWith
 
     -- * Enums
+  , enum
   , enumWith
 
     -- ** Items
@@ -48,6 +49,7 @@ module Data.Query.Encode
 
     -- ** Constructors
   , Types.ConstructorEncoder
+  , contramapConstructorEncoder
   , constructor
   , constructorWith
 
@@ -78,6 +80,8 @@ import           Data.Fix (Fix, unFix)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.IntMap.Strict as IntMap
+import           Data.Maybe (fromMaybe)
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Query.Encode.Types as Types
@@ -85,15 +89,23 @@ import qualified Data.Query.Generic as Generic
 import qualified Data.Query.Schema as Schema
 import qualified Data.Query.Schema.Types as Schema
 import qualified Data.Query.Shape as Shape
+import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import           Data.Scientific (Scientific)
 import           Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Vector as Vector
 import qualified Type.Reflection as Reflection
 
 -- * Classes
 
+-- | @a@ can be encoded via 'Types.Encoder'
+--
+-- When defining an instance, you can omit 'encoder' if @a@ has instances of SOP generics
+-- (@generics-sop@).
+--
 class HasEncoder a where
+  -- | 'Types.Encoder' for @a@
   encoder :: Types.Encoder a
 
   -- | Generic implemention
@@ -167,39 +179,85 @@ deriving
 liftBase :: Types.EncoderBase a -> Types.Encoder a
 liftBase = Types.Encoder . Contravariant.Coyoneda.liftCoyoneda
 
+-- | Boolean encoder
 bool :: Types.Encoder Bool
 bool = liftBase Types.BoolEncoder
 
+-- | Number encoder
 number :: Types.Encoder Scientific
 number = liftBase Types.NumberEncoder
 
+-- | String encoder
 string :: Types.Encoder Text
 string = liftBase Types.StringEncoder
 
+-- | See 'nullableWith'.
 nullable :: HasEncoder a => Types.Encoder (Maybe a)
 nullable = nullableWith encoder
 
+-- | Encode an optional @a@. In case of @Nothing@, it will encode to @null@. Otherwise the given
+-- 'Types.Encoder' will be used.
 nullableWith :: Types.Encoder a -> Types.Encoder (Maybe a)
 nullableWith = liftBase . Types.NullableEncoder
 
+-- | See 'arrayWith'.
 array :: HasEncoder a => Types.Encoder (Vector.Vector a)
 array = arrayWith encoder
 
+-- | Encode as an array where its items will be encoded using the given 'Types.Encoder'.
 arrayWith :: Types.Encoder a -> Types.Encoder (Vector.Vector a)
 arrayWith = liftBase . Types.ArrayEncoder
 
+-- | See 'stringMapWith'.
 stringMap :: HasEncoder a => Types.Encoder (HashMap.HashMap Text a)
 stringMap = stringMapWith encoder
 
+-- | Encode as an object mapping strings to values that are encoded using the given 'Types.Encoder'.
 stringMapWith :: Types.Encoder a -> Types.Encoder (HashMap.HashMap Text a)
 stringMapWith = liftBase . Types.StringMapEncoder
 
-enumWith :: SOP.SListI xs => SOP.NP Types.ItemEncoder xs -> Types.Encoder (SOP.NS f xs)
-enumWith = liftBase . Types.EnumEncoder
+-- | Encode an enum.
+--
+-- Note: While in practise this encoder isn't partial, a bad 'Enum' implementation can make it so.
+--
+enum :: forall a. (Bounded a, Enum a, Show a) => Types.Encoder a
+enum =
+  Utilities.instantiateProduct [minBound .. maxBound @a] $ \product ->
+    let
+      items = SOP.hmap (item . Text.pack . show . SOP.unK) product
 
-item :: Text -> Types.ItemEncoder a
-item = Types.ItemEncoder
+      valueMap =
+        IntMap.fromList $ SOP.hcollapse $
+          SOP.hzipWith
+            (\(SOP.K value) (SOP.Fn f) ->
+              SOP.K (fromEnum value, SOP.unK (f SOP.Proxy))
+            )
+            product
+            SOP.injections
 
+      findSum value =
+        fromMaybe (error "Unknown enum value") $
+          IntMap.lookup (fromEnum value) valueMap
+
+    in
+      contramap findSum (enumWith items)
+
+-- | Encode an enum which is made up of items described in the given n-ary product.
+enumWith
+  :: SOP.SListI xs
+  => SOP.NP Types.ItemEncoder xs
+  -> Types.Encoder (SOP.NS f xs)
+enumWith =
+  liftBase . Types.EnumEncoder
+
+-- | Describe an item of an enum.
+item
+  :: Text -- ^ Enum value
+  -> Types.ItemEncoder a
+item =
+  Types.ItemEncoder
+
+-- | Encode as a variant. The constructors of the variant are described via the given n-ary product.
 variantWith
   :: SOP.SListI xs
   => SOP.NP (Types.ConstructorEncoder f) xs
@@ -207,60 +265,99 @@ variantWith
 variantWith =
   liftBase . Types.VariantEncoder
 
+-- | Transform the given 'Types.ConstructorEncoder'.
+contramapConstructorEncoder
+  :: (g b -> f a)
+  -> Types.ConstructorEncoder f a
+  -> Types.ConstructorEncoder g b
+contramapConstructorEncoder f encoder = Types.ConstructorEncoder
+  { Types.constructorEncoder_name = Types.constructorEncoder_name encoder
+  , Types.constructorEncoder_value = contramap f $ Types.constructorEncoder_value encoder
+  }
+
+-- | See 'constructorWith'.
 constructor
   :: HasEncoder a
-  => Text
+  => Text -- ^ Constructor name
   -> Types.ConstructorEncoder SOP.I a
 constructor name =
   Types.ConstructorEncoder name $ contramap SOP.unI encoder
 
+-- | Encoder for a constructor of a variant
 constructorWith
-  :: Text
-  -> Types.Encoder (f a)
+  :: Text -- ^ Constructor name
+  -> Types.Encoder (f a) -- ^ Encoder for constructor value
   -> Types.ConstructorEncoder f a
 constructorWith =
   Types.ConstructorEncoder
 
-field :: HasEncoder b => (a -> b) -> Types.FieldEncoder a
-field access = fieldWith access encoder
+-- | See 'fieldWith'.
+field
+  :: HasEncoder b
+  => (a -> b) -- ^ Field accessor
+  -> Types.FieldEncoder a
+field access =
+  fieldWith access encoder
 
-fieldWith :: (a -> b) -> Types.Encoder b -> Types.FieldEncoder a
+-- | Field encoder for a field @b@ in type @a@
+fieldWith
+  :: (a -> b) -- ^ Field accessor
+  -> Types.Encoder b -- ^ Encoder for the field value
+  -> Types.FieldEncoder a
 fieldWith access encoder =
   Types.FieldEncoder
-    $ Contravariant.Coyoneda.liftCoyoneda
-    $ Types.MandatoryFieldSelector
-    $ contramap access encoder
+  $ Contravariant.Coyoneda.liftCoyoneda
+  $ Types.MandatoryFieldSelector
+  $ contramap access encoder
 
-optionalField :: HasEncoder b => (a -> Maybe b) -> Types.FieldEncoder a
-optionalField access = optionalFieldWith access encoder
+-- | See 'optionalFieldWith'.
+optionalField
+  :: HasEncoder b
+  => (a -> Maybe b) -- ^ Field accessor (@Just@ when present, @Nothing@ when absent)
+  -> Types.FieldEncoder a
+optionalField access =
+  optionalFieldWith access encoder
 
-optionalFieldWith :: (a -> Maybe b) -> Types.Encoder b -> Types.FieldEncoder a
+-- | Field encoder for an optional type @b@ in type @a@.
+optionalFieldWith
+  :: (a -> Maybe b) -- ^ Field accessor (@Just@ when present, @Nothing@ when absent)
+  -> Types.Encoder b -- ^ Encoder for the field when it is present
+  -> Types.FieldEncoder a
 optionalFieldWith access encoder =
   contramap access
-    $ Types.FieldEncoder
-    $ Contravariant.Coyoneda.liftCoyoneda
-    $ Types.OptionalFieldSelector encoder
+  $ Types.FieldEncoder
+  $ Contravariant.Coyoneda.liftCoyoneda
+  $ Types.OptionalFieldSelector encoder
 
+-- | See 'recordWith'.
 record :: HasFieldsEncoder a => Types.Encoder a
 record = recordWith fieldsEncoder
 
-recordWith :: HashMap.HashMap Text (Types.FieldEncoder a) -> Types.Encoder a
-recordWith = liftBase . Types.RecordEncoder
+-- | Encode a record with the given fields.
+recordWith
+  :: HashMap.HashMap Text (Types.FieldEncoder a) -- ^ Mapping from field name to its encoder
+  -> Types.Encoder a
+recordWith =
+  liftBase . Types.RecordEncoder
 
 -- * Schema derivation
 
+-- | See 'querySchemaEncoderWith'.
 querySchemaEncoder :: Schema.HasSchema a => Types.Encoder a
 querySchemaEncoder = querySchemaEncoderWith Schema.querySchema
 
+-- | Convert a 'Schema.QuerySchema' to a 'Types.Encoder'.
 querySchemaEncoderWith :: Schema.QuerySchema a b -> Types.Encoder a
 querySchemaEncoderWith querySchema =
   case Schema.querySchema_schema querySchema of
     Left encoder -> encoder
     Right schema -> schemaEncoderWith schema
 
+-- | See 'schemaEncoderWith'.
 schemaEncoder :: Schema.HasSchema a => Types.Encoder a
 schemaEncoder = schemaEncoderWith Schema.schema
 
+-- | Convert a 'Schema.Schema' to a 'Types.Encoder'.
 schemaEncoderWith :: Schema.Schema a b -> Types.Encoder a
 schemaEncoderWith (Schema.Schema (Profunctor.Coyoneda f _ schemaBase)) =
   contramap f $ schemaBaseEncoderWith schemaBase
@@ -396,7 +493,7 @@ instance Generic.SchemaFlavour HasEncoder where
   constructorWith name extract _lift (GQueryEncoder encoder) =
     GConstructorEncoder $ constructorWith name $ contramap extract encoder
 
--- | Encoder for a generic type @a@
+-- | Generic 'Types.Encoder' for an @a@ that has instances for SOP generics
 generic
   :: Generic.GHas HasEncoder a
   => Generic.Options
@@ -404,7 +501,7 @@ generic
 generic options =
   unGEncoder $ Generic.gSchema options
 
--- | Field encoder for a generic record type @a@
+-- | Generic 'Types.FieldEncoder's for an @a@ that has instances for SOP generics.
 genericFields
   :: Generic.GHasFields HasEncoder a
   => Generic.Options

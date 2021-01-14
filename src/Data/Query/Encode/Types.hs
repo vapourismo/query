@@ -26,10 +26,12 @@ import           Data.Text (Text)
 import           Data.Vector (Vector)
 import qualified Prettyprinter as Pretty
 
+-- | Encoder for an item of an enum
 newtype ItemEncoder a = ItemEncoder
   { itemEncoder_name :: Text }
   deriving Show
 
+-- | Encoder for a constructor of a variant
 data ConstructorEncoder f a = ConstructorEncoder
   { constructorEncoder_name :: Text
   , constructorEncoder_value :: Encoder (f a)
@@ -51,6 +53,7 @@ data FieldSelector a where
 
 deriving instance Show (FieldSelector a)
 
+-- | Encoder for a field of a record
 newtype FieldEncoder a = FieldEncoder
   { unFieldEncoder :: Coyoneda FieldSelector a }
   deriving newtype Contravariant
@@ -130,6 +133,7 @@ encoderBaseToShape = Fix . \case
   RecordEncoder fields ->
     Shape.Record $ HashMap.map fieldEncoderToFieldShape fields
 
+-- | Schematic to encode @a@
 newtype Encoder a = Encoder
   { unEncoder :: Coyoneda EncoderBase a }
   deriving newtype Contravariant
