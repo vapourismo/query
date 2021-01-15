@@ -73,6 +73,7 @@ fieldQueryToFieldShape = \case
     , Shape.fieldShape_optional = True
     }
 
+-- | Decoder for 0 or more fields
 newtype FieldsDecoder a = FieldsDecoder
   { unFieldDecoder :: Ap FieldQuery a }
   deriving newtype (Functor, Applicative)
@@ -147,6 +148,7 @@ decoderBaseToShape = \case
   VariantDecoder constructors -> Shape.Variant $ constructorQueryToQueryShape <$> constructors
   RecordDecoder fields -> Shape.Record $ fieldDecoderToFieldShapes fields
 
+-- | Decoder for @a@
 newtype Decoder a = Decoder
   { unDecoder :: Coyoneda DecoderBase a }
   deriving newtype Functor

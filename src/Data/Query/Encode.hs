@@ -28,7 +28,7 @@ module Data.Query.Encode
   , nullable
   , nullableWith
 
-    -- * Lists
+    -- * Arrays
   , array
   , arrayWith
 

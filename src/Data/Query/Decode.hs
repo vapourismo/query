@@ -25,31 +25,41 @@ module Data.Query.Decode
   , HasDecoder (..)
   , Types.Decoder
   , generic
+
+    -- * Primitives
   , bool
   , number
   , string
+
+    -- * Nullables
   , nullable
   , nullableWith
+
+    -- * Arrays
   , array
   , arrayWith
+
+    -- * String mappings
   , stringMap
   , stringMapWith
+
+    -- * Enums
   , enum
   , enumWith
+
+    -- * Variants
   , variantWith
 
+    -- ** Constructors
   , Types.ConstructorQuery
   , constructor
   , constructorWith
 
+    -- * Records
   , record
   , recordWith
 
-  , querySchemaQuery
-  , querySchemaQueryWith
-  , schemaDecoder
-  , schemaDecoderWith
-
+    -- ** Fields
   , HasFieldsDecoder (..)
   , Types.FieldsDecoder
   , genericFields
@@ -57,6 +67,12 @@ module Data.Query.Decode
   , fieldWith
   , optionalField
   , optionalFieldWith
+
+    -- * Schema derivation
+  , querySchemaQuery
+  , querySchemaQueryWith
+  , schemaDecoder
+  , schemaDecoderWith
   )
 where
 
@@ -158,15 +174,22 @@ deriving
 
 -- * Queries
 
+-- | See 'queryWith'.
 query :: HasDecoder a => Types.Query a
 query = queryWith decoder
 
-queryWith :: Reflection.Typeable a => Types.Decoder a -> Types.Query a
+-- | Query for @a@ where the @a@ can be decoded or instantiated through a function call
+queryWith
+  :: Reflection.Typeable a
+  => Types.Decoder a -- ^ Decoder for when it is not a function call
+  -> Types.Query a
 queryWith = Types.Query Reflection.typeRep . Just
 
+-- | Query for @a@ where @a@ can only be instantiated through a function call
 undecodableQuery :: Reflection.Typeable a => Types.Query a
 undecodableQuery = Types.Query Reflection.typeRep Nothing
 
+-- | 'Reflection.TypeRep' for @a@
 queryType :: Types.Query a -> Reflection.TypeRep a
 queryType = Types.query_type
 
@@ -175,34 +198,50 @@ queryType = Types.query_type
 liftBase :: Types.DecoderBase a -> Types.Decoder a
 liftBase = Types.Decoder . Coyoneda.liftCoyoneda
 
+-- | Boolean decoder
 bool :: Types.Decoder Bool
 bool = liftBase Types.BoolDecoder
 
+-- | Numeric decoder
 number :: Types.Decoder Scientific
 number = liftBase Types.NumberDecoder
 
+-- | String decoder
 string :: Types.Decoder Text
 string = liftBase Types.StringDecoder
 
+-- | See 'nullableWith'.
 nullable :: HasDecoder a => Types.Decoder (Maybe a)
 nullable = nullableWith decoder
 
+-- | Decode @a@ but allow decoding @null@ which results in a @Nothing@
 nullableWith :: Types.Decoder a -> Types.Decoder (Maybe a)
 nullableWith (Types.Decoder (Coyoneda.Coyoneda f base)) =
   Types.Decoder $ Coyoneda.Coyoneda (fmap f) $ Types.NullableDecoder base
 
+-- | See 'arrayWith'.
 array :: HasDecoder a => Types.Decoder (Vector.Vector a)
 array = arrayWith query
 
-arrayWith :: Types.Query a -> Types.Decoder (Vector.Vector a)
-arrayWith = liftBase . Types.ArrayDecoder
+-- | Decode an array of @a@s.
+arrayWith
+  :: Types.Query a -- ^ Decoder for each item of the array
+  -> Types.Decoder (Vector.Vector a)
+arrayWith =
+  liftBase . Types.ArrayDecoder
 
+-- | See 'stringMapWith'.
 stringMap :: HasDecoder a => Types.Decoder (HashMap.HashMap Text a)
 stringMap = stringMapWith query
 
-stringMapWith :: Types.Query a -> Types.Decoder (HashMap.HashMap Text a)
-stringMapWith = liftBase . Types.StringMapDecoder
+-- | Decode an object mapping strings to values that can be decoded using given 'Types.Query'.
+stringMapWith
+  :: Types.Query a -- ^ Decoder for each string-mapped value
+  -> Types.Decoder (HashMap.HashMap Text a)
+stringMapWith =
+  liftBase . Types.StringMapDecoder
 
+-- | Decode an enum.
 enum :: (Show a, Bounded a, Enum a) => Types.Decoder a
 enum =
   enumWith $ HashMap.fromList
@@ -210,45 +249,89 @@ enum =
     | elem <- [minBound .. maxBound]
     ]
 
-enumWith :: HashMap.HashMap Text a -> Types.Decoder a
-enumWith = liftBase . Types.EnumDecoder
+-- | Decode an enum using the given mapping.
+enumWith
+  :: HashMap.HashMap Text a -- ^ Mapping from stringified representation to actual value
+  -> Types.Decoder a
+enumWith =
+  liftBase . Types.EnumDecoder
 
-variantWith :: HashMap.HashMap Text (Types.ConstructorQuery a) -> Types.Decoder a
-variantWith = liftBase . Types.VariantDecoder
-
-record :: HasFieldsDecoder a => Types.Decoder a
-record = recordWith fieldsDecoder
-
-recordWith :: Types.FieldsDecoder a -> Types.Decoder a
-recordWith = liftBase . Types.RecordDecoder
+-- | Decode a variant.
+variantWith
+  :: HashMap.HashMap Text (Types.ConstructorQuery a) -- ^ Mapping from constructor name to decoder
+  -> Types.Decoder a
+variantWith =
+  liftBase . Types.VariantDecoder
 
 -- * Constructor decoders
 
+-- | See 'constructorWith'.
 constructor :: HasDecoder b => (b -> a) -> Types.ConstructorQuery a
 constructor = constructorWith query
 
-constructorWith :: Types.Query b -> (b -> a) -> Types.ConstructorQuery a
-constructorWith query f = Types.ConstructorQuery $ Coyoneda.Coyoneda f query
+-- | Decode a constructor of @a@ via @b@.
+constructorWith
+  :: Types.Query b -- ^ Decoder for the constructor body
+  -> (b -> a) -- ^ Constructor of the variant
+  -> Types.ConstructorQuery a
+constructorWith query f =
+  Types.ConstructorQuery $ Coyoneda.Coyoneda f query
+
+-- | See 'recordWith'.
+record
+  :: HasFieldsDecoder a
+  => Types.Decoder a
+record =
+  recordWith fieldsDecoder
+
+-- | Decode a record.
+recordWith
+  :: Types.FieldsDecoder a -- ^ Describes how the fields are decoded to assemble @a@
+  -> Types.Decoder a
+recordWith =
+  liftBase . Types.RecordDecoder
 
 -- * Field decoders
 
-field :: HasDecoder a => Text -> Types.FieldsDecoder a
-field name = fieldWith name query
+-- | See 'fieldWith'.
+field
+  :: HasDecoder a
+  => Text -- ^ Field name
+  -> Types.FieldsDecoder a
+field name =
+  fieldWith name query
 
-fieldWith :: Text -> Types.Query a -> Types.FieldsDecoder a
-fieldWith name query = Types.FieldsDecoder $ liftAp $ Types.MandatoryFieldQuery name query
+-- | Decode a mandatory field.
+fieldWith
+  :: Text -- ^ Field name
+  -> Types.Query a -- ^ Decoder for the field value
+  -> Types.FieldsDecoder a
+fieldWith name query =
+  Types.FieldsDecoder $ liftAp $ Types.MandatoryFieldQuery name query
 
-optionalField :: HasDecoder a => Text -> Types.FieldsDecoder (Maybe a)
-optionalField name = optionalFieldWith name query
+-- | See 'optionalFieldWith'.
+optionalField
+  :: HasDecoder a
+  => Text -- ^ Field name
+  -> Types.FieldsDecoder (Maybe a)
+optionalField name =
+  optionalFieldWith name query
 
-optionalFieldWith :: Text -> Types.Query a -> Types.FieldsDecoder (Maybe a)
-optionalFieldWith name query = Types.FieldsDecoder $ liftAp $ Types.OptionalFieldQuery name query
+-- | Decode an optional field.
+optionalFieldWith
+  :: Text -- ^ Field name
+  -> Types.Query a -- ^ Field value decoder if it is present
+  -> Types.FieldsDecoder (Maybe a)
+optionalFieldWith name query =
+  Types.FieldsDecoder $ liftAp $ Types.OptionalFieldQuery name query
 
 -- * Schema derivation
 
+-- | See 'querySchemaQueryWith'.
 querySchemaQuery :: Schema.HasSchema a => Types.Query a
 querySchemaQuery = querySchemaQueryWith Schema.querySchema
 
+-- | Convert a 'Schema.QuerySchema' to a 'Types.Query'.
 querySchemaQueryWith :: Schema.QuerySchema a b -> Types.Query b
 querySchemaQueryWith querySchema =
   Reflection.withTypeable (Schema.querySchema_type querySchema) $
@@ -256,9 +339,11 @@ querySchemaQueryWith querySchema =
       Right schema -> queryWith $ schemaDecoderWith schema
       Left _ -> undecodableQuery
 
+-- | See 'schemaDecoderWith'.
 schemaDecoder :: Schema.HasSchema a => Types.Decoder a
 schemaDecoder = schemaDecoderWith Schema.schema
 
+-- | Convert a 'Schema.Schema' to a 'Types.Decoder'.
 schemaDecoderWith :: Schema.Schema a b -> Types.Decoder b
 schemaDecoderWith (Schema.Schema (Profunctor.Coyoneda _ f schemaBase)) =
   f <$> schemaBaseDecoderWith schemaBase
@@ -385,6 +470,7 @@ instance Generic.SchemaFlavour HasDecoder where
   constructorWith name _ lift query =
     GConstructorDecoder name $ constructorWith (unGQuery query) lift
 
+-- | Generic decoder for @a@ if it implements instances for SOP generics
 generic
   :: Generic.GHas HasDecoder a
   => Generic.Options
@@ -392,6 +478,7 @@ generic
 generic options =
   unGDecoder $ Generic.gSchema options
 
+-- | Generic fields decoder for @a@ if it implements instances for SOP generics
 genericFields
   :: Generic.GHasFields HasDecoder a
   => Generic.Options
