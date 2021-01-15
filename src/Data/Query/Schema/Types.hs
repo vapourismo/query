@@ -170,7 +170,7 @@ schemaBaseToShape = \case
         constructors
   RecordSchema fields -> Shape.Record $ fieldsSchemaToFieldShapes fields
 
--- | Schema for encoding @a@ and decoding @b@
+-- | Schema for an encodable @a@ and a decodable @b@
 newtype Schema a b = Schema
   { unSchema :: Coyoneda SchemaBase a b }
   deriving newtype Profunctor
@@ -179,7 +179,7 @@ newtype Schema a b = Schema
 schemaToShape :: Schema a b -> Shape.ShapeF Shape.QueryShape
 schemaToShape (Schema (Coyoneda _ _ base)) = schemaBaseToShape base
 
--- | Query for things that can be encoded and decoded
+-- | Queryable schema for an encodable @a@ and a decodable @b@
 data QuerySchema a b = QuerySchema
   { querySchema_type :: Reflection.TypeRep b
   -- ^ Type of the thing to be decoded

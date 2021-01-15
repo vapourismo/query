@@ -20,32 +20,49 @@ module Data.Query.Schema
   , HasSchema (..)
   , Types.Schema
   , generic
+
+    -- * Primitives
   , bool
   , number
   , string
+
+    -- * Nullables
   , nullable
   , nullableWith
+
+    -- * Arrays
   , array
   , arrayWith
+
+    -- * String mappings
   , stringMap
   , stringMapWith
+
+    -- * Enums
   , enumWith
 
+    -- ** Items
   , Types.ItemSchema
   , itemWith
 
+    -- * Variants
   , variantWith
 
+    -- ** Constructors
   , Types.ConstructorSchema
+  , dimapConstructor
   , constructor
   , constructorWith
 
+    -- * Records
   , record
   , recordWith
 
+    -- * Fields
   , HasFieldsSchema (..)
   , Types.FieldsSchema
   , genericFields
+
   , field
   , fieldWith
   , optionalField
@@ -144,10 +161,16 @@ deriving
 
 -- * Query schemas
 
+-- See 'querySchemaWith'.
 querySchema :: HasSchema a => Types.QuerySchema a a
 querySchema = querySchemaWith schema
 
-querySchemaWith :: Reflection.Typeable b => Types.Schema a b -> Types.QuerySchema a b
+-- | Schema for an encodable type @a@ and a decodable type @b@ that also be instantiated through a
+-- function call.
+querySchemaWith
+  :: Reflection.Typeable b
+  => Types.Schema a b
+  -> Types.QuerySchema a b
 querySchemaWith = Types.QuerySchema Reflection.typeRep . Right
 
 -- * Schemas
@@ -155,39 +178,52 @@ querySchemaWith = Types.QuerySchema Reflection.typeRep . Right
 liftBase :: Types.SchemaBase a b -> Types.Schema a b
 liftBase = Types.Schema . returnCoyoneda
 
+-- | Boolean schema
 bool :: Types.Schema Bool Bool
 bool = liftBase Types.BoolSchema
 
+-- | Numeric schema
 number :: Types.Schema Scientific Scientific
 number = liftBase Types.NumberSchema
 
+-- | String schema
 string :: Types.Schema Text Text
 string = liftBase Types.StringSchema
 
+-- | See 'nullableWith'.
 nullable :: HasSchema a => Types.Schema (Maybe a) (Maybe a)
 nullable = nullableWith schema
 
+-- | Schema for @a@ and @b@
 nullableWith :: Types.Schema a b -> Types.Schema (Maybe a) (Maybe b)
 nullableWith = liftBase . Types.NullableSchema
 
+-- | See 'arrayWith'.
 array :: HasSchema a => Types.Schema (Vector.Vector a) (Vector.Vector a)
 array = arrayWith querySchema
 
-arrayWith :: Types.QuerySchema a b -> Types.Schema (Vector.Vector a) (Vector.Vector b)
-arrayWith = liftBase . Types.ArraySchema
+-- | Schema for an array that is encoded with items of @a@ and decoded to items of @b@.
+arrayWith
+  :: Types.QuerySchema a b -- ^ Item schema
+  -> Types.Schema (Vector.Vector a) (Vector.Vector b)
+arrayWith =
+  liftBase . Types.ArraySchema
 
+-- | See 'stringMapWith'.
 stringMap
   :: HasSchema a
   => Types.Schema (HashMap.HashMap Text a) (HashMap.HashMap Text a)
 stringMap =
   stringMapWith querySchema
 
+-- | Schema for an object that maps strings to values
 stringMapWith
-  :: Types.QuerySchema a b
+  :: Types.QuerySchema a b -- ^ String-mapped value schema
   -> Types.Schema (HashMap.HashMap Text a) (HashMap.HashMap Text b)
 stringMapWith =
   liftBase . Types.StringMapSchema
 
+-- | Schema for an enum
 enumWith
   :: SOP.SListI xs
   => SOP.NP (Types.ItemSchema f) xs
@@ -195,64 +231,97 @@ enumWith
 enumWith =
   liftBase . Types.EnumSchema
 
-itemWith :: Text -> f a -> Types.ItemSchema f a
-itemWith = Types.ItemSchema
+-- | Schema for an item of an enum
+itemWith
+  :: Text -- ^ Item identifier
+  -> f a -- ^ Enum value
+  -> Types.ItemSchema f a
+itemWith =
+  Types.ItemSchema
 
+-- | Variant schema
 variantWith
   :: SOP.SListI xs
-  => SOP.NP (Types.ConstructorSchema f) xs
+  => SOP.NP (Types.ConstructorSchema f) xs -- ^ Constructors
   -> Types.Schema (SOP.NS f xs) (SOP.NS f xs)
 variantWith =
   liftBase . Types.VariantSchema
 
+-- | Transform a 'Types.ConstructorSchema'.
+dimapConstructor
+  :: (g b -> f a)
+  -> (f a -> g b)
+  -> Types.ConstructorSchema f a
+  -> Types.ConstructorSchema g b
+dimapConstructor f g schema = Types.ConstructorSchema
+  { Types.constructorSchema_name = Types.constructorSchema_name schema
+  , Types.constructorSchema_schema = dimap f g $ Types.constructorSchema_schema schema
+  }
+
+-- | See 'constructorWith'.
 constructor
   :: HasSchema a
-  => Text
+  => Text -- ^ Constructor name
   -> Types.ConstructorSchema SOP.I a
 constructor name =
   constructorWith name SOP.unI SOP.I querySchema
 
+-- | Constructor schema
 constructorWith
-  :: Text
-  -> (f a -> b)
-  -> (c -> f a)
-  -> Types.QuerySchema b c
+  :: Text -- ^ Constructor name
+  -> (f a -> b) -- ^ Contravariant
+  -> (c -> f a) -- ^ Covariant
+  -> Types.QuerySchema b c -- ^ Queryable schema that will be used to get the constructor value
   -> Types.ConstructorSchema f a
 constructorWith name f g query =
   Types.ConstructorSchema name $ Coyoneda f g query
 
+-- | See 'recordWith'.
 record :: HasFieldsSchema a => Types.Schema a a
 record = recordWith fieldsSchema
 
-recordWith :: Types.FieldsSchema a b -> Types.Schema a b
-recordWith = liftBase . Types.RecordSchema
+-- | Record schema
+recordWith
+  :: Types.FieldsSchema a b -- ^ Schema describing the fields of the record
+  -> Types.Schema a b
+recordWith =
+  liftBase . Types.RecordSchema
 
 liftFieldSchema :: Types.FieldSchema a b -> Types.FieldsSchema a b
 liftFieldSchema = Types.FieldsSchema . liftAp . returnCoyoneda
 
-field :: HasSchema b => Text -> (a -> b) -> Types.FieldsSchema a b
-field name = fieldWith name querySchema
+-- | See 'fieldWith'.
+field
+  :: HasSchema b
+  => Text -- ^ Field name
+  -> (a -> b) -- ^ Field accessor
+  -> Types.FieldsSchema a b
+field name =
+  fieldWith name querySchema
 
+-- | Mandatory record field schema
 fieldWith
-  :: Text
-  -> Types.QuerySchema a' b
-  -> (a -> a')
+  :: Text -- ^ Field name
+  -> Types.QuerySchema b' b -- ^ Schema for the field value
+  -> (a -> b') -- ^ Accessor
   -> Types.FieldsSchema a b
 fieldWith name querySchema f =
   lmap f $ liftFieldSchema $ Types.MandatoryFieldSchema name querySchema
 
+-- | See 'optionalFieldWith'.
 optionalField
   :: HasSchema b
-  => Text
-  -> (a -> Maybe b)
+  => Text -- ^ Field name
+  -> (a -> Maybe b) -- ^ Field accessor
   -> Types.FieldsSchema a (Maybe b)
 optionalField name =
   optionalFieldWith name querySchema
 
+-- | Optional record field schema
 optionalFieldWith
-  :: Text
-  -> Types.QuerySchema a' b
-  -> (a -> Maybe a')
+  :: Text -- ^ Field name
+  -> Types.QuerySchema b' b -- ^ Schema for the field value when it is present
+  -> (a -> Maybe b') -- ^ Field accessor; returns @Just@ when the field is available
   -> Types.FieldsSchema a (Maybe b)
 optionalFieldWith name querySchema f =
   lmap f $ liftFieldSchema $ Types.OptionalFieldSchema name querySchema
