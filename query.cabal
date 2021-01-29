@@ -6,9 +6,25 @@ build-type:    Simple
 library
   default-language: Haskell2010
   ghc-options:      -Wall -Wno-name-shadowing
-  build-depends:    base, aeson, text, scientific, unordered-containers, vector,
-                    containers, sop-core, free, profunctors, mtl, bytestring,
-                    kan-extensions, generics-sop, prettyprinter, data-fix, reflection
+  build-depends:    base,
+                    aeson,
+                    base-encoding,
+                    bytestring,
+                    containers,
+                    data-fix,
+                    free,
+                    generics-sop,
+                    kan-extensions,
+                    mtl,
+                    prettyprinter,
+                    profunctors,
+                    reflection,
+                    scientific,
+                    sop-core,
+                    text,
+                    time,
+                    unordered-containers,
+                    vector
   hs-source-dirs:   src
   exposed-modules:  Data.Query
                     Data.Query.Decode
@@ -23,6 +39,7 @@ library
                     Data.Query.Generic
                     Data.Query.Generic.Class
                     Data.Query.Generic.Options
+                    Data.Query.Primitives
                     Data.Query.Schema
                     Data.Query.Schema.Types
                     Data.Query.Shape
