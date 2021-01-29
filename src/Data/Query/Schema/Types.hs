@@ -21,10 +21,10 @@ import qualified Data.HashMap.Strict as HashMap
 import           Data.Profunctor (Profunctor (..))
 import           Data.Profunctor.Yoneda (Coyoneda (..))
 import qualified Data.Query.Encode.Types as Encode
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
-import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import           Data.Vector (Vector)
 import           GHC.Generics (Generic)
@@ -105,14 +105,9 @@ data ItemSchema f a = ItemSchema
   deriving Show
 
 data SchemaBase a b where
-  BoolSchema
-    :: SchemaBase Bool Bool
-
-  NumberSchema
-    :: SchemaBase Scientific Scientific
-
-  StringSchema
-    :: SchemaBase Text Text
+  PrimitiveSchema
+    :: Primitives.Primitive a
+    -> SchemaBase a a
 
   NullableSchema
     :: Schema a b
@@ -152,9 +147,7 @@ instance Pretty.Pretty (SchemaBase a b) where
 
 schemaBaseToShape :: SchemaBase a b -> Shape.ShapeF Shape.QueryShape
 schemaBaseToShape = \case
-  BoolSchema -> Shape.Bool
-  NumberSchema -> Shape.Number
-  StringSchema -> Shape.String
+  PrimitiveSchema prim -> Shape.Primitive $ Primitives.SomePrimitive prim
   NullableSchema schema -> Shape.Nullable $ schemaToShape schema
   ArraySchema query -> Shape.Array $ querySchemaToQueryShape query
   StringMapSchema query -> Shape.StringMap $ querySchemaToQueryShape query

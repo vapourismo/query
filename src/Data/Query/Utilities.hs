@@ -27,6 +27,7 @@ module Data.Query.Utilities
   , runPrettyM
   , recursePretty
   , instantiateProduct
+  , Some (..)
   )
 where
 
@@ -162,3 +163,6 @@ instantiateProduct
   -> r
 instantiateProduct [] f = f SOP.Nil
 instantiateProduct (x : xs) f = instantiateProduct xs $ \tail -> f $ SOP.K x SOP.:* tail
+
+data Some f where
+  Some :: f a -> Some f

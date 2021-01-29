@@ -14,10 +14,10 @@ import           Data.Fix (Fix (Fix), foldFix)
 import           Data.Functor.Coyoneda (Coyoneda (..))
 import qualified Data.HashMap.Strict as HashMap
 import           Data.HashSet (HashSet)
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.Query.Value as Value
-import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import           Data.Vector (Vector)
 import qualified Prettyprinter as Pretty
@@ -93,14 +93,9 @@ fieldDecoderToFieldShapes :: FieldsDecoder b -> HashMap.HashMap Text (Shape.Fiel
 fieldDecoderToFieldShapes = runAp_ fieldQueryToFieldShape . unFieldDecoder
 
 data DecoderBase a where
-  BoolDecoder
-    :: DecoderBase Bool
-
-  NumberDecoder
-    :: DecoderBase Scientific
-
-  StringDecoder
-    :: DecoderBase Text
+  PrimitiveDecoder
+    :: Primitives.Primitive a
+    -> DecoderBase a
 
   NullableDecoder
     :: DecoderBase a
@@ -138,9 +133,7 @@ instance Pretty.Pretty (DecoderBase a) where
 
 decoderBaseToShape :: DecoderBase a -> Shape.ShapeF Shape.QueryShape
 decoderBaseToShape = \case
-  BoolDecoder -> Shape.Bool
-  NumberDecoder -> Shape.Number
-  StringDecoder -> Shape.String
+  PrimitiveDecoder prim -> Shape.Primitive $ Primitives.SomePrimitive prim
   NullableDecoder base -> Shape.Nullable $ decoderBaseToShape base
   ArrayDecoder decoder -> Shape.Array $ queryToShape decoder
   StringMapDecoder decoder -> Shape.StringMap $ queryToShape decoder
@@ -171,5 +164,6 @@ data DecodeError
   | UnknownEnum (HashSet Text) Text
   | NoMatchingConstructor (HashSet Text) Value.Object
   | forall a. MultipleConstructors [ConstructorMatch a]
+  | BadPrimitive Value.NoCallValue Text
 
 deriving instance Show DecodeError

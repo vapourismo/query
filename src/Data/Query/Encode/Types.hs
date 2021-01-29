@@ -18,10 +18,10 @@ import           Data.Fix (Fix (Fix, unFix))
 import           Data.Functor.Contravariant (Contravariant (..))
 import           Data.Functor.Contravariant.Coyoneda (Coyoneda (..))
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
-import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import           Data.Vector (Vector)
 import qualified Prettyprinter as Pretty
@@ -73,14 +73,9 @@ fieldEncoderToFieldShape (FieldEncoder (Coyoneda _ selector)) =
       }
 
 data EncoderBase a where
-  BoolEncoder
-    :: EncoderBase Bool
-
-  NumberEncoder
-    :: EncoderBase Scientific
-
-  StringEncoder
-    :: EncoderBase Text
+  PrimitiveEncoder
+    :: Primitives.Primitive a
+    -> EncoderBase a
 
   NullableEncoder
     :: Encoder a
@@ -116,9 +111,7 @@ instance Pretty.Pretty (EncoderBase a) where
 
 encoderBaseToShape :: EncoderBase a -> Shape.Shape
 encoderBaseToShape = Fix . \case
-  BoolEncoder -> Shape.Bool
-  NumberEncoder -> Shape.Number
-  StringEncoder -> Shape.String
+  PrimitiveEncoder prim -> Shape.Primitive $ Primitives.SomePrimitive prim
   NullableEncoder encoder -> Shape.Nullable $ unFix $ encoderToShape encoder
   ArrayEncoder encoder -> Shape.Array $ encoderToShape encoder
   StringMapEncoder encoder -> Shape.StringMap $ encoderToShape encoder

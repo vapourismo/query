@@ -28,7 +28,12 @@ module Data.Query.Decode
 
     -- * Primitives
   , bool
+  , float
+  , double
   , number
+  , int32
+  , int64
+  , integer
   , string
 
     -- * Nullables
@@ -73,6 +78,8 @@ module Data.Query.Decode
   , querySchemaQueryWith
   , schemaDecoder
   , schemaDecoderWith
+  , fieldsSchemaFieldsDecoder
+  , fieldsSchemaFieldsDecoderWith
   )
 where
 
@@ -81,11 +88,13 @@ import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix))
 import qualified Data.Functor.Coyoneda as Coyoneda
 import qualified Data.HashMap.Strict as HashMap
+import           Data.Int (Int32, Int64)
 import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Query.Decode.Types as Types
 import qualified Data.Query.Generic as Generic
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Schema as Schema
 import qualified Data.Query.Schema.Types as Schema
 import qualified Data.Query.Shape as Shape
@@ -109,13 +118,28 @@ instance HasDecoder () where
   decoder = record
 
 instance HasDecoder Bool where
-  decoder = bool
+  decoder = schemaDecoder
+
+instance HasDecoder Float where
+  decoder = schemaDecoder
+
+instance HasDecoder Double where
+  decoder = schemaDecoder
 
 instance HasDecoder Scientific where
-  decoder = number
+  decoder = schemaDecoder
+
+instance HasDecoder Int32 where
+  decoder = schemaDecoder
+
+instance HasDecoder Int64 where
+  decoder = schemaDecoder
+
+instance HasDecoder Integer where
+  decoder = schemaDecoder
 
 instance HasDecoder Text where
-  decoder = string
+  decoder = schemaDecoder
 
 instance HasDecoder a => HasDecoder (Vector.Vector a) where
   decoder = array
@@ -129,6 +153,25 @@ instance HasDecoder a => HasDecoder (HashMap.HashMap Text a) where
 instance (Reflection.Typeable f, HasDecoder (f (Fix f))) => HasDecoder (Fix f) where
   decoder = Fix <$> decoder
 
+instance HasDecoder a => HasDecoder (Primitives.Limit a)
+
+instance HasDecoder (Utilities.Some Primitives.NumberInfo) where
+  decoder = schemaDecoder
+
+instance HasDecoder (Utilities.Some Primitives.IntegerInfo) where
+  decoder = schemaDecoder
+
+instance HasDecoder (Utilities.Some Primitives.StringFormat) where
+  decoder = schemaDecoder
+
+instance HasDecoder Primitives.SomePrimitive where
+  decoder = schemaDecoder
+
+instance HasDecoder a => HasDecoder (Shape.FieldShapeF a) where
+  decoder = record
+
+instance HasDecoder a => HasDecoder (Shape.ShapeF a)
+
 instance
   ( Reflection.Typeable a
   , Reflection.Typeable k
@@ -139,11 +182,6 @@ instance
   => HasDecoder (Generic.CustomGeneric (options :: [k]) a)
   where
     decoder = coerce (generic @a (Generic.demoteOptions @options SOP.Proxy))
-
-instance HasDecoder a => HasDecoder (Shape.FieldShapeF a) where
-  decoder = record
-
-instance HasDecoder a => HasDecoder (Shape.ShapeF a)
 
 class HasFieldsDecoder a where
   fieldsDecoder :: Types.FieldsDecoder a
@@ -183,7 +221,8 @@ queryWith
   :: Reflection.Typeable a
   => Types.Decoder a -- ^ Decoder for when it is not a function call
   -> Types.Query a
-queryWith = Types.Query Reflection.typeRep . Just
+queryWith =
+  Types.Query Reflection.typeRep . Just
 
 -- | Query for @a@ where @a@ can only be instantiated through a function call
 undecodableQuery :: Reflection.Typeable a => Types.Query a
@@ -198,17 +237,41 @@ queryType = Types.query_type
 liftBase :: Types.DecoderBase a -> Types.Decoder a
 liftBase = Types.Decoder . Coyoneda.liftCoyoneda
 
+-- | Primitive decoder
+primitive :: Primitives.Primitive a -> Types.Decoder a
+primitive prim = liftBase $ Types.PrimitiveDecoder prim
+
 -- | Boolean decoder
 bool :: Types.Decoder Bool
-bool = liftBase Types.BoolDecoder
+bool = schemaDecoder
+
+-- | Float decoder
+float :: Types.Decoder Float
+float = schemaDecoder
+
+-- | Double decoder
+double :: Types.Decoder Double
+double = schemaDecoder
 
 -- | Numeric decoder
 number :: Types.Decoder Scientific
-number = liftBase Types.NumberDecoder
+number = schemaDecoder
+
+-- | Int32 decoder
+int32 :: Types.Decoder Int32
+int32 = schemaDecoder
+
+-- | Int64 decoder
+int64 :: Types.Decoder Int64
+int64 = schemaDecoder
+
+-- | Integer decoder
+integer :: Types.Decoder Integer
+integer = schemaDecoder
 
 -- | String decoder
 string :: Types.Decoder Text
-string = liftBase Types.StringDecoder
+string = schemaDecoder
 
 -- | See 'nullableWith'.
 nullable :: HasDecoder a => Types.Decoder (Maybe a)
@@ -350,14 +413,8 @@ schemaDecoderWith (Schema.Schema (Profunctor.Coyoneda _ f schemaBase)) =
 
 schemaBaseDecoderWith :: Schema.SchemaBase a b -> Types.Decoder b
 schemaBaseDecoderWith = \case
-  Schema.BoolSchema ->
-    bool
-
-  Schema.NumberSchema ->
-    number
-
-  Schema.StringSchema ->
-    string
+  Schema.PrimitiveSchema prim ->
+    primitive prim
 
   Schema.NullableSchema schema ->
     nullableWith $ schemaDecoderWith schema
@@ -387,17 +444,23 @@ schemaBaseDecoderWith = \case
         SOP.injections
 
   Schema.RecordSchema fields ->
-    recordWith $
-      runAp
-        (\(Profunctor.Coyoneda _ g fieldSchema) ->
-          case fieldSchema of
-            Schema.MandatoryFieldSchema name schema ->
-              fmap g $ fieldWith name $ querySchemaQueryWith schema
+    recordWith $ fieldsSchemaFieldsDecoderWith fields
 
-            Schema.OptionalFieldSchema name schema ->
-              fmap g $ optionalFieldWith name $ querySchemaQueryWith schema
-        )
-        (Schema.unFieldsSchema fields)
+fieldsSchemaFieldsDecoder :: Schema.HasFieldsSchema a => Types.FieldsDecoder a
+fieldsSchemaFieldsDecoder = fieldsSchemaFieldsDecoderWith Schema.fieldsSchema
+
+fieldsSchemaFieldsDecoderWith :: Schema.FieldsSchema a b -> Types.FieldsDecoder b
+fieldsSchemaFieldsDecoderWith fields =
+  runAp
+    (\(Profunctor.Coyoneda _ g fieldSchema) ->
+      case fieldSchema of
+        Schema.MandatoryFieldSchema name schema ->
+          fmap g $ fieldWith name $ querySchemaQueryWith schema
+
+        Schema.OptionalFieldSchema name schema ->
+          fmap g $ optionalFieldWith name $ querySchemaQueryWith schema
+    )
+    (Schema.unFieldsSchema fields)
 
 -- * Generics
 

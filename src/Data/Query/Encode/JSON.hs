@@ -10,6 +10,7 @@ import qualified Data.Aeson as Aeson
 import           Data.Functor.Contravariant.Coyoneda (Coyoneda (Coyoneda))
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Query.Encode.Types as Types
+import qualified Data.Query.Primitives.JSON as Primitives
 import qualified Data.SOP as SOP
 import qualified Data.Vector as Vector
 
@@ -20,14 +21,8 @@ runEncoder (Types.Encoder (Coyoneda f encoderBase)) =
 runEncoderBase :: Types.EncoderBase a -> a -> Aeson.Value
 runEncoderBase encoder value =
   case encoder of
-    Types.BoolEncoder ->
-      Aeson.Bool value
-
-    Types.NumberEncoder ->
-      Aeson.Number value
-
-    Types.StringEncoder ->
-      Aeson.String value
+    Types.PrimitiveEncoder prim ->
+      Primitives.encodePrimitive prim value
 
     Types.NullableEncoder encoder ->
       case value of

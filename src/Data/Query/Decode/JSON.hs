@@ -20,6 +20,7 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Decode.Types as Types
 import qualified Data.Query.Evaluate as Evaluate
+import qualified Data.Query.Primitives.JSON as Primitives
 import qualified Data.Query.Schema.Types as Schema
 import qualified Data.Query.Value as Value
 
@@ -68,20 +69,8 @@ evalDecoderBase
   -> Evaluate.Evaluate m a
 evalDecoderBase decoder queryValue =
   case decoder of
-    Types.BoolDecoder ->
-      case queryValue of
-        Value.Bool value -> pure value
-        queryValue       -> throwUnexpected queryValue
-
-    Types.NumberDecoder ->
-      case queryValue of
-        Value.Number value -> pure value
-        queryValue         -> throwUnexpected queryValue
-
-    Types.StringDecoder ->
-      case queryValue of
-        Value.String value -> pure value
-        queryValue         -> throwUnexpected queryValue
+    Types.PrimitiveDecoder prim ->
+      Primitives.decodePrimitive prim queryValue
 
     Types.NullableDecoder decoder ->
       case queryValue of

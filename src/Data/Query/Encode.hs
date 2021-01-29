@@ -21,7 +21,12 @@ module Data.Query.Encode
 
     -- * Primitives
   , bool
+  , float
+  , double
   , number
+  , int32
+  , int64
+  , integer
   , string
 
     -- * Nullables
@@ -80,12 +85,14 @@ import           Data.Fix (Fix, unFix)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
 import qualified Data.HashMap.Strict as HashMap
+import           Data.Int (Int32, Int64)
 import qualified Data.IntMap.Strict as IntMap
 import           Data.Maybe (fromMaybe)
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Query.Encode.Types as Types
 import qualified Data.Query.Generic as Generic
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Schema as Schema
 import qualified Data.Query.Schema.Types as Schema
 import qualified Data.Query.Shape as Shape
@@ -116,13 +123,28 @@ instance HasEncoder () where
   encoder = record
 
 instance HasEncoder Bool where
-  encoder = bool
+  encoder = schemaEncoder
+
+instance HasEncoder Float where
+  encoder = schemaEncoder
+
+instance HasEncoder Double where
+  encoder = schemaEncoder
 
 instance HasEncoder Scientific where
-  encoder = number
+  encoder = schemaEncoder
+
+instance HasEncoder Int32 where
+  encoder = schemaEncoder
+
+instance HasEncoder Int64 where
+  encoder = schemaEncoder
+
+instance HasEncoder Integer where
+  encoder = schemaEncoder
 
 instance HasEncoder Text where
-  encoder = string
+  encoder = schemaEncoder
 
 instance HasEncoder a => HasEncoder (Vector.Vector a) where
   encoder = array
@@ -136,6 +158,25 @@ instance HasEncoder a => HasEncoder (HashMap.HashMap Text a) where
 instance HasEncoder (f (Fix f)) => HasEncoder (Fix f) where
   encoder = contramap unFix encoder
 
+instance HasEncoder a => HasEncoder (Primitives.Limit a)
+
+instance HasEncoder (Utilities.Some Primitives.NumberInfo) where
+  encoder = schemaEncoder
+
+instance HasEncoder (Utilities.Some Primitives.IntegerInfo) where
+  encoder = schemaEncoder
+
+instance HasEncoder (Utilities.Some Primitives.StringFormat) where
+  encoder = schemaEncoder
+
+instance HasEncoder Primitives.SomePrimitive where
+  encoder = schemaEncoder
+
+instance HasEncoder a => HasEncoder (Shape.FieldShapeF a) where
+  encoder = record
+
+instance (HasEncoder a, Reflection.Typeable a) => HasEncoder (Shape.ShapeF a)
+
 instance
   ( Generic.GHas HasEncoder a
   , SOP.All Generic.KnownGenericOption options
@@ -143,12 +184,6 @@ instance
   => HasEncoder (Generic.CustomGeneric options a)
   where
     encoder = coerce (generic @a (Generic.demoteOptions @options SOP.Proxy))
-
-instance HasEncoder a => HasEncoder (Shape.FieldShapeF a) where
-  encoder = record
-
-instance (HasEncoder a, Reflection.Typeable a) => HasEncoder (Shape.ShapeF a) where
-  encoder = generic Generic.defaultOptions
 
 class HasFieldsEncoder a where
   fieldsEncoder :: HashMap.HashMap Text (Types.FieldEncoder a)
@@ -179,17 +214,41 @@ deriving
 liftBase :: Types.EncoderBase a -> Types.Encoder a
 liftBase = Types.Encoder . Contravariant.Coyoneda.liftCoyoneda
 
+-- | Primitive encoder
+primitive :: Primitives.Primitive a -> Types.Encoder a
+primitive prim = liftBase $ Types.PrimitiveEncoder prim
+
 -- | Boolean encoder
 bool :: Types.Encoder Bool
-bool = liftBase Types.BoolEncoder
+bool = schemaEncoder
+
+-- | Float encoder
+float :: Types.Encoder Float
+float = schemaEncoder
+
+-- | Double encoder
+double :: Types.Encoder Double
+double = schemaEncoder
 
 -- | Number encoder
 number :: Types.Encoder Scientific
-number = liftBase Types.NumberEncoder
+number = schemaEncoder
+
+-- | Int32 encoder
+int32 :: Types.Encoder Int32
+int32 = schemaEncoder
+
+-- | Int64 encoder
+int64 :: Types.Encoder Int64
+int64 = schemaEncoder
+
+-- | Integer encoder
+integer :: Types.Encoder Integer
+integer = schemaEncoder
 
 -- | String encoder
 string :: Types.Encoder Text
-string = liftBase Types.StringEncoder
+string = schemaEncoder
 
 -- | See 'nullableWith'.
 nullable :: HasEncoder a => Types.Encoder (Maybe a)
@@ -364,14 +423,8 @@ schemaEncoderWith (Schema.Schema (Profunctor.Coyoneda f _ schemaBase)) =
 
 schemaBaseEncoderWith :: Schema.SchemaBase a b -> Types.Encoder a
 schemaBaseEncoderWith = \case
-  Schema.BoolSchema ->
-    bool
-
-  Schema.NumberSchema ->
-    number
-
-  Schema.StringSchema ->
-    string
+  Schema.PrimitiveSchema prim ->
+    primitive prim
 
   Schema.NullableSchema schema ->
     nullableWith $ schemaEncoderWith schema
@@ -396,22 +449,28 @@ schemaBaseEncoderWith = \case
         )
         constructors
 
-  Schema.RecordSchema (Schema.FieldsSchema fields) ->
-    recordWith $
-      runAp_
-        (\(Profunctor.Coyoneda f _ fieldSchema) ->
-          case fieldSchema of
-            Schema.MandatoryFieldSchema name schema ->
-              HashMap.singleton name
-              $ fieldWith f
-              $ querySchemaEncoderWith schema
+  Schema.RecordSchema fields ->
+    recordWith $ fieldsSchemaFieldEncoders fields
 
-            Schema.OptionalFieldSchema name schema ->
-              HashMap.singleton name
-              $ optionalFieldWith f
-              $ querySchemaEncoderWith schema
-        )
-        fields
+fieldsSchemaFieldEncoders
+  :: Schema.FieldsSchema a b
+  -> HashMap.HashMap Text (Types.FieldEncoder a)
+fieldsSchemaFieldEncoders fields =
+  runAp_
+    (\(Profunctor.Coyoneda f _ fieldSchema) ->
+      case fieldSchema of
+        Schema.MandatoryFieldSchema name schema ->
+          HashMap.singleton name
+          $ fieldWith f
+          $ querySchemaEncoderWith schema
+
+        Schema.OptionalFieldSchema name schema ->
+          HashMap.singleton name
+          $ optionalFieldWith f
+          $ querySchemaEncoderWith schema
+    )
+    (Schema.unFieldsSchema fields)
+
 
 -- * Generics
 

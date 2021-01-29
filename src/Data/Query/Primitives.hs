@@ -1,4 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
@@ -9,18 +12,22 @@
 {-# LANGUAGE TypeApplications #-}
 
 module Data.Query.Primitives
-  ( Primitive (..)
-  , SomePrimitive (..)
+  ( SomePrimitive (..)
+  , Primitive (..)
+  , reifyPrimitiveConstraints
+  , NumberInfo (..)
   , NumberFormat (..)
+  , reifyNumberConstraints
+  , IntegerInfo (..)
   , IntegerFormat (..)
+  , reifyIntegerConstraints
   , StringFormat (..)
-  , encodePrimitive
-  , decodePrimitive
+  , reifyStringConstraints
+
+  , Limit (..)
   )
 where
 
-import qualified Codec.Base64 as Base64
-import           Control.Monad (unless, when, (<=<))
 import qualified Data.Aeson.Types as Aeson
 import           Data.ByteString (ByteString)
 import           Data.Int (Int32, Int64)
@@ -28,6 +35,9 @@ import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import           Data.Time.Calendar (Day)
 import           Data.Time.Clock (UTCTime)
+import           GHC.Generics (Generic)
+import qualified Generics.SOP as SOP
+import qualified Prettyprinter as Pretty
 import qualified Type.Reflection as Reflection
 
 ---
@@ -36,7 +46,8 @@ data Limit a
   = NoLimit
   | InclusiveLimit a
   | ExclusiveLimit a
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
 
 ---
 
@@ -62,29 +73,11 @@ data NumberInfo a = NumberInfo
   , numberInfo_lowerLimit :: Limit a
   , numberInfo_upperLimit :: Limit a
   }
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
 
 type NumberParseConstraint a =
   (Aeson.FromJSON a, Aeson.ToJSON a, Show a, Ord a, Reflection.Typeable a)
-
-parseNumber :: NumberInfo a -> Aeson.Value -> Aeson.Parser a
-parseNumber info value = reifyNumberConstraints (numberInfo_format info) $ do
-  number <- Aeson.parseJSON value
-
-  case numberInfo_lowerLimit info of
-    NoLimit -> pure ()
-    InclusiveLimit limit -> unless (number >= limit) $ fail $ show number <> " < " <> show limit
-    ExclusiveLimit limit -> unless (number > limit) $ fail $ show number <> " <= " <> show limit
-
-  case numberInfo_upperLimit info of
-    NoLimit -> pure ()
-    InclusiveLimit limit -> unless (number <= limit) $ fail $ show number <> " > " <> show limit
-    ExclusiveLimit limit -> unless (number < limit) $ fail $ show number <> " >= " <> show limit
-
-  pure number
-
-encodeNumber :: NumberInfo a -> a -> Aeson.Value
-encodeNumber info = reifyNumberConstraints (numberInfo_format info) Aeson.toJSON
 
 ---
 
@@ -111,33 +104,11 @@ data IntegerInfo a = IntegerInfo
   , integerInfo_upperLimit :: Limit a
   , integerInfo_multipleOf :: Maybe a
   }
-  deriving (Show, Eq, Ord)
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
 
 type IntegerParseConstraint a =
   (Aeson.FromJSON a, Aeson.ToJSON a, Show a, Integral a, Ord a, Reflection.Typeable a)
-
-parseInteger :: IntegerInfo a -> Aeson.Value -> Aeson.Parser a
-parseInteger info value = reifyIntegerConstraints (integerInfo_format info) $ do
-  integer <- Aeson.parseJSON value
-
-  case integerInfo_lowerLimit info of
-    NoLimit -> pure ()
-    InclusiveLimit limit -> unless (integer >= limit) $ fail $ show integer <> " < " <> show limit
-    ExclusiveLimit limit -> unless (integer > limit) $ fail $ show integer <> " <= " <> show limit
-
-  case integerInfo_upperLimit info of
-    NoLimit -> pure ()
-    InclusiveLimit limit -> unless (integer <= limit) $ fail $ show integer <> " > " <> show limit
-    ExclusiveLimit limit -> unless (integer < limit) $ fail $ show integer <> " >= " <> show limit
-
-  case integerInfo_multipleOf info of
-    Just multiple -> when (mod integer multiple /= 0) $ fail ""
-    Nothing -> pure ()
-
-  pure integer
-
-encodeInteger :: IntegerInfo a -> a -> Aeson.Value
-encodeInteger info = reifyIntegerConstraints (integerInfo_format info) Aeson.toJSON
 
 ---
 
@@ -154,24 +125,6 @@ deriving instance Show (StringFormat a)
 deriving instance Eq (StringFormat a)
 
 deriving instance Ord (StringFormat a)
-
-parseString :: StringFormat a -> Aeson.Value -> Aeson.Parser a
-parseString = \case
-  NoStringFormat -> Aeson.parseJSON
-  ByteFormat -> either fail pure . Base64.decode @Text <=< Aeson.parseJSON
-  BinaryFormat -> Aeson.parseJSON
-  DateFormat -> Aeson.parseJSON
-  DateTimeFormat -> Aeson.parseJSON
-  PasswordFormat   -> Aeson.parseJSON
-
-encodeString :: StringFormat a -> a -> Aeson.Value
-encodeString = \case
-  NoStringFormat -> Aeson.toJSON
-  ByteFormat -> Aeson.toJSON @Text . Base64.encode
-  BinaryFormat -> Aeson.toJSON
-  DateFormat -> Aeson.toJSON
-  DateTimeFormat -> Aeson.toJSON
-  PasswordFormat  -> Aeson.toJSON
 
 type StringConstraints a = (Show a, Ord a, Reflection.Typeable a)
 
@@ -198,19 +151,12 @@ deriving instance Eq a => Eq (Primitive a)
 
 deriving instance Ord a => Ord (Primitive a)
 
-decodePrimitive :: Primitive a -> Aeson.Value -> Aeson.Parser a
-decodePrimitive = \case
-  Boolean -> Aeson.parseJSON
-  Number info -> parseNumber info
-  Integer info -> parseInteger info
-  String format -> parseString format
-
-encodePrimitive :: Primitive a -> a -> Aeson.Value
-encodePrimitive = \case
-  Boolean -> Aeson.toJSON
-  Number info -> encodeNumber info
-  Integer info -> encodeInteger info
-  String format -> encodeString format
+instance Pretty.Pretty (Primitive a) where
+  pretty = \case
+    Boolean{} -> Pretty.pretty @String "Boolean"
+    Number{} -> Pretty.pretty @String "Number"
+    Integer{} -> Pretty.pretty @String "Integer"
+    String{} -> Pretty.pretty @String "String"
 
 type PrimitiveConstraints a = (Show a, Ord a, Reflection.Typeable a)
 
@@ -245,3 +191,6 @@ instance Ord SomePrimitive where
         case Reflection.eqTypeRep leftRep rightRep of
           Just Reflection.HRefl -> compare lhs rhs
           Nothing -> compare (Reflection.SomeTypeRep leftRep) (Reflection.SomeTypeRep rightRep)
+
+instance Pretty.Pretty SomePrimitive where
+  pretty (SomePrimitive prim) = Pretty.pretty prim

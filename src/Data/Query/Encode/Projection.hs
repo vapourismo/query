@@ -20,6 +20,7 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Encode.Types as Types
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Schema.Types as Types
 import qualified Data.Query.Shape as Shape
 import qualified Data.SOP as SOP
@@ -31,6 +32,7 @@ data ProjectionError
   | TargetFieldIsMandatory
   | ExtraMandatoryFields (HashSet.HashSet Text)
   | forall a. CompleteMismatch Shape.Shape (Encode.Encoder a)
+  | IncompatiblePrimitives Primitives.SomePrimitive Primitives.SomePrimitive
 
 deriving instance Show ProjectionError
 
@@ -51,6 +53,22 @@ nestProjectionError path =
   first $ \(LocatedProjectionError paths error) ->
     LocatedProjectionError (path : paths) error
 
+projectPrimitive
+  :: Primitives.Primitive a
+  -> Primitives.Primitive b
+  -> Either LocatedProjectionError (Primitives.Primitive b)
+projectPrimitive target source =
+  case (target, source) of
+    _ | Primitives.SomePrimitive target == Primitives.SomePrimitive source ->
+      Right source
+
+    -- TODO: There are way more projection possibilities waiting to be implemented.
+
+    _ -> throwProjectionError $
+      IncompatiblePrimitives
+        (Primitives.SomePrimitive target)
+         (Primitives.SomePrimitive source)
+
 projectEncoder
   :: Shape.Shape
   -> Encode.Encoder a
@@ -67,14 +85,8 @@ projectEncoderBase
   -> Either LocatedProjectionError (Types.EncoderBase a)
 projectEncoderBase fixTarget@(Fix target) source =
   case (target, source) of
-    (Shape.Bool, Types.BoolEncoder) ->
-      pure source
-
-    (Shape.Number, Types.NumberEncoder) ->
-      pure source
-
-    (Shape.String, Types.StringEncoder) ->
-      pure source
+    (Shape.Primitive (Primitives.SomePrimitive lhs), Types.PrimitiveEncoder rhs) ->
+      Types.PrimitiveEncoder <$> projectPrimitive lhs rhs
 
     (Shape.Array targetItems, Types.ArrayEncoder sourceItems) ->
       nestProjectionError Types.ArrayPath $

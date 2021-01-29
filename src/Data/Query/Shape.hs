@@ -24,6 +24,7 @@ import           Data.Fix (Fix (..), foldFix)
 import           Data.Functor.Classes (Show1 (..))
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Utilities as Utilities
 import           Data.Text (Text)
 import           Data.Traversable (for)
@@ -45,9 +46,7 @@ data FieldShapeF a = FieldShape
 
 -- | Shape of something
 data ShapeF a
-  = Bool
-  | Number
-  | String
+  = Primitive Primitives.SomePrimitive
   | Nullable (ShapeF a)
   | Array a
   | StringMap a
@@ -60,9 +59,7 @@ data ShapeF a
 
 prettyShapeF :: ShapeF (Utilities.PrettyM ann) -> Utilities.PrettyM ann
 prettyShapeF = \case
-  Bool -> pure $ Pretty.pretty "Bool"
-  Number -> pure $ Pretty.pretty "Number"
-  String -> pure $ Pretty.pretty "String"
+  Primitive prim -> pure $ Pretty.pretty prim
   Nullable inner -> do
     inner <- prettyShapeF inner
     pure $ Pretty.parens inner <> Pretty.pretty "?"

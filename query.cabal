@@ -40,6 +40,7 @@ library
                     Data.Query.Generic.Class
                     Data.Query.Generic.Options
                     Data.Query.Primitives
+                    Data.Query.Primitives.JSON
                     Data.Query.Schema
                     Data.Query.Schema.Types
                     Data.Query.Shape
