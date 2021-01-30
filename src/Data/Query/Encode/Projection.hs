@@ -15,7 +15,8 @@ where
 import           Control.Monad (unless)
 import           Data.Bifunctor (Bifunctor (first))
 import           Data.Fix (Fix (Fix))
-import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
+import           Data.Functor.Contravariant (Contravariant (contramap))
+import qualified Data.Functor.Contravariant.Coyoneda as Contravariant
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Data.Query.Encode as Encode
@@ -24,7 +25,8 @@ import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Schema.Types as Types
 import qualified Data.Query.Shape as Shape
 import qualified Data.SOP as SOP
-import           Data.Text (Text)
+import           Data.Text (Text, pack)
+import qualified Data.Text.Encoding as Text
 
 data ProjectionError
   = EnumItemsMismatch (HashSet.HashSet Text) (HashSet.HashSet Text)
@@ -56,18 +58,46 @@ nestProjectionError path =
 projectPrimitive
   :: Primitives.Primitive a
   -> Primitives.Primitive b
-  -> Either LocatedProjectionError (Primitives.Primitive b)
+  -> Either LocatedProjectionError (Contravariant.Coyoneda Primitives.Primitive b)
 projectPrimitive target source =
   case (target, source) of
     _ | Primitives.SomePrimitive target == Primitives.SomePrimitive source ->
-      Right source
+      -- If both sides are equal then everything is fine.
+      Right $ Contravariant.Coyoneda id source
 
     -- TODO: There are way more projection possibilities waiting to be implemented.
+
+    (Primitives.String targetFormat, Primitives.String sourceFormat)
+      | Primitives.NoStringFormat <- targetFormat ->
+        -- The target has no expectation of the string.
+        Right $ Contravariant.Coyoneda id source
+
+      | Primitives.ByteFormat <- targetFormat ->
+        -- We can base64-encode the string and with that match the target expectation.
+        let
+          convert =
+            case sourceFormat of
+              Primitives.NoStringFormat -> Text.encodeUtf8
+              Primitives.ByteFormat -> id
+              Primitives.BinaryFormat -> Text.encodeUtf8
+              Primitives.DateFormat -> Text.encodeUtf8 . pack . show
+              Primitives.DateTimeFormat -> Text.encodeUtf8 . pack . show
+              Primitives.PasswordFormat -> Text.encodeUtf8
+        in
+          Right $ Contravariant.Coyoneda convert $ Primitives.String Primitives.ByteFormat
+
+      | Primitives.BinaryFormat <- targetFormat ->
+        -- In this context, binary does not mean anything special.
+        Right $ Contravariant.Coyoneda id source
+
+      | Primitives.PasswordFormat <- targetFormat ->
+        -- The password format is a UI hint.
+        Right $ Contravariant.Coyoneda id source
 
     _ -> throwProjectionError $
       IncompatiblePrimitives
         (Primitives.SomePrimitive target)
-         (Primitives.SomePrimitive source)
+        (Primitives.SomePrimitive source)
 
 projectEncoder
   :: Shape.Shape
@@ -75,26 +105,26 @@ projectEncoder
   -> Either LocatedProjectionError (Encode.Encoder a)
 projectEncoder target sourceEncoder =
   case sourceEncoder of
-    Types.Encoder (Contravariant.Coyoneda.Coyoneda f source) ->
-      Types.Encoder . Contravariant.Coyoneda.Coyoneda f <$>
-        projectEncoderBase target source
+    Types.Encoder (Contravariant.Coyoneda f source) ->
+      contramap f <$> projectEncoderBase target source
 
 projectEncoderBase
   :: Shape.Shape
   -> Types.EncoderBase a
-  -> Either LocatedProjectionError (Types.EncoderBase a)
+  -> Either LocatedProjectionError (Types.Encoder a)
 projectEncoderBase fixTarget@(Fix target) source =
   case (target, source) of
-    (Shape.Primitive (Primitives.SomePrimitive lhs), Types.PrimitiveEncoder rhs) ->
-      Types.PrimitiveEncoder <$> projectPrimitive lhs rhs
+    (Shape.Primitive (Primitives.SomePrimitive lhs), Types.PrimitiveEncoder rhs) -> do
+      Contravariant.Coyoneda f prim <- projectPrimitive lhs rhs
+      pure $ contramap f $ liftSimple $ Types.PrimitiveEncoder prim
 
     (Shape.Array targetItems, Types.ArrayEncoder sourceItems) ->
       nestProjectionError Types.ArrayPath $
-        Types.ArrayEncoder <$> projectEncoder targetItems sourceItems
+        liftSimple . Types.ArrayEncoder <$> projectEncoder targetItems sourceItems
 
     (Shape.StringMap targetItems, Types.StringMapEncoder sourceItems) ->
       nestProjectionError Types.StringMapPath $
-        Types.StringMapEncoder <$> projectEncoder targetItems sourceItems
+        liftSimple . Types.StringMapEncoder <$> projectEncoder targetItems sourceItems
 
     (Shape.Enum targetsList, Types.EnumEncoder sourceItems) -> do
       let
@@ -108,7 +138,7 @@ projectEncoderBase fixTarget@(Fix target) source =
       unless (HashSet.isSubsetOf sources targets) $
         throwProjectionError $ EnumItemsMismatch targets sources
 
-      pure source
+      pure $ liftSimple source
 
     (Shape.Variant targets, Types.VariantEncoder sourceConstructors) -> do
       sourceConstructors <-
@@ -124,7 +154,7 @@ projectEncoderBase fixTarget@(Fix target) source =
           )
           sourceConstructors
 
-      pure $ Types.VariantEncoder sourceConstructors
+      pure $ liftSimple $ Types.VariantEncoder sourceConstructors
 
     (Shape.Record targetFields, Types.RecordEncoder sourceFields) -> do
       let
@@ -135,7 +165,7 @@ projectEncoderBase fixTarget@(Fix target) source =
       unless (null mandatoryExtraFields) $
         throwProjectionError $ ExtraMandatoryFields $ HashMap.keysSet mandatoryExtraFields
 
-      fmap Types.RecordEncoder $ sequenceA $
+      fmap (liftSimple . Types.RecordEncoder) $ sequenceA $
         HashMap.intersectionWithKey
           (\name target source ->
             nestProjectionError (Types.FieldPath name) $ projectFieldEncoder target source
@@ -145,7 +175,11 @@ projectEncoderBase fixTarget@(Fix target) source =
 
     _ ->
       throwProjectionError $ CompleteMismatch fixTarget $ Types.Encoder $
-        Contravariant.Coyoneda.liftCoyoneda source
+        Contravariant.liftCoyoneda source
+
+    where
+      liftSimple :: Types.EncoderBase x -> Types.Encoder x
+      liftSimple = Types.Encoder . Contravariant.liftCoyoneda
 
 projectFieldEncoder
   :: Shape.FieldShapeF Shape.Shape
@@ -153,8 +187,8 @@ projectFieldEncoder
   -> Either LocatedProjectionError (Types.FieldEncoder a)
 projectFieldEncoder (Shape.FieldShape target optional) (Types.FieldEncoder sourceField) =
   case sourceField of
-    Contravariant.Coyoneda.Coyoneda f sourceSelector -> do
-      let rewrap = Types.FieldEncoder . Contravariant.Coyoneda.Coyoneda f
+    Contravariant.Coyoneda f sourceSelector -> do
+      let rewrap = Types.FieldEncoder . Contravariant.Coyoneda f
       case sourceSelector of
         Types.OptionalFieldSelector source
           | optional  -> rewrap . Types.OptionalFieldSelector <$> projectEncoder target source
