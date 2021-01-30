@@ -63,14 +63,14 @@ projectPrimitive target source =
   case (target, source) of
     _ | Primitives.SomePrimitive target == Primitives.SomePrimitive source ->
       -- If both sides are equal then everything is fine.
-      Right $ Contravariant.Coyoneda id source
+      Right $ Contravariant.liftCoyoneda source
 
     -- TODO: There are way more projection possibilities waiting to be implemented.
 
     (Primitives.String targetFormat, Primitives.String sourceFormat)
       | Primitives.NoStringFormat <- targetFormat ->
         -- The target has no expectation of the string.
-        Right $ Contravariant.Coyoneda id source
+        Right $ Contravariant.liftCoyoneda source
 
       | Primitives.ByteFormat <- targetFormat ->
         -- We can base64-encode the string and with that match the target expectation.
@@ -88,11 +88,11 @@ projectPrimitive target source =
 
       | Primitives.BinaryFormat <- targetFormat ->
         -- In this context, binary does not mean anything special.
-        Right $ Contravariant.Coyoneda id source
+        Right $ Contravariant.liftCoyoneda source
 
       | Primitives.PasswordFormat <- targetFormat ->
         -- The password format is a UI hint.
-        Right $ Contravariant.Coyoneda id source
+        Right $ Contravariant.liftCoyoneda source
 
     _ -> throwProjectionError $
       IncompatiblePrimitives
