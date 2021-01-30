@@ -55,9 +55,10 @@ nestProjectionError path =
   first $ \(LocatedProjectionError paths error) ->
     LocatedProjectionError (path : paths) error
 
+-- | Project a primitive type to match the target.
 projectPrimitive
-  :: Primitives.Primitive a
-  -> Primitives.Primitive b
+  :: Primitives.Primitive a -- ^ Target
+  -> Primitives.Primitive b -- ^ Subject
   -> Either LocatedProjectionError (Contravariant.Coyoneda Primitives.Primitive b)
 projectPrimitive target source =
   case (target, source) of
@@ -99,6 +100,7 @@ projectPrimitive target source =
         (Primitives.SomePrimitive target)
         (Primitives.SomePrimitive source)
 
+-- | Project an encoder to match the given shape.
 projectEncoder
   :: Shape.Shape
   -> Encode.Encoder a
@@ -108,6 +110,7 @@ projectEncoder target sourceEncoder =
     Types.Encoder (Contravariant.Coyoneda f source) ->
       contramap f <$> projectEncoderBase target source
 
+-- | Project an encoder base to match the given shape.
 projectEncoderBase
   :: Shape.Shape
   -> Types.EncoderBase a
@@ -181,6 +184,7 @@ projectEncoderBase fixTarget@(Fix target) source =
       liftSimple :: Types.EncoderBase x -> Types.Encoder x
       liftSimple = Types.Encoder . Contravariant.liftCoyoneda
 
+-- | Project a field encoder to match the given field shape.
 projectFieldEncoder
   :: Shape.FieldShapeF Shape.Shape
   -> Types.FieldEncoder a
