@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
@@ -18,9 +19,11 @@ module Data.Query.Primitives
   , NumberInfo (..)
   , NumberFormat (..)
   , reifyNumberConstraints
+  , normalizeNumberLimit
   , IntegerInfo (..)
   , IntegerFormat (..)
   , reifyIntegerConstraints
+  , normalizeIntegerLimit
   , StringFormat (..)
   , reifyStringConstraints
 
@@ -31,7 +34,7 @@ where
 import qualified Data.Aeson.Types as Aeson
 import           Data.ByteString (ByteString)
 import           Data.Int (Int32, Int64)
-import           Data.Scientific (Scientific)
+import           Data.Scientific (Scientific, fromFloatDigits)
 import           Data.Text (Text)
 import           Data.Time.Calendar (Day)
 import           Data.Time.Clock (UTCTime)
@@ -46,7 +49,7 @@ data Limit a
   = NoLimit
   | InclusiveLimit a
   | ExclusiveLimit a
-  deriving stock (Show, Eq, Ord, Generic)
+  deriving stock (Show, Eq, Ord, Generic, Functor, Foldable, Traversable)
   deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
 
 ---
@@ -62,11 +65,17 @@ deriving instance Eq (NumberFormat a)
 
 deriving instance Ord (NumberFormat a)
 
-reifyNumberConstraints :: NumberFormat a -> (NumberParseConstraint a => r) -> r
+reifyNumberConstraints :: NumberFormat a -> (NumberConstraint a => r) -> r
 reifyNumberConstraints = \case
   NoNumberFormat -> id
   FloatFormat -> id
   DoubleFormat -> id
+
+normalizeNumberLimit :: Functor f => NumberFormat a -> f a -> f Scientific
+normalizeNumberLimit = \case
+  NoNumberFormat -> id
+  FloatFormat -> fmap fromFloatDigits
+  DoubleFormat -> fmap fromFloatDigits
 
 data NumberInfo a = NumberInfo
   { numberInfo_format :: NumberFormat a
@@ -76,7 +85,7 @@ data NumberInfo a = NumberInfo
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
 
-type NumberParseConstraint a =
+type NumberConstraint a =
   (Aeson.FromJSON a, Aeson.ToJSON a, Show a, Ord a, Reflection.Typeable a)
 
 ---
@@ -92,11 +101,17 @@ deriving instance Eq (IntegerFormat a)
 
 deriving instance Ord (IntegerFormat a)
 
-reifyIntegerConstraints :: IntegerFormat a -> (IntegerParseConstraint a => r) -> r
+reifyIntegerConstraints :: IntegerFormat a -> (IntegerConstraint a => r) -> r
 reifyIntegerConstraints = \case
   NoIntegerFormat -> id
   Int32Format -> id
   Int64Format -> id
+
+normalizeIntegerLimit :: Functor f => IntegerFormat a -> f a -> f Scientific
+normalizeIntegerLimit = fmap . \case
+  NoIntegerFormat -> fromIntegral
+  Int32Format -> fromIntegral
+  Int64Format -> fromIntegral
 
 data IntegerInfo a = IntegerInfo
   { integerInfo_format :: IntegerFormat a
@@ -107,17 +122,28 @@ data IntegerInfo a = IntegerInfo
   deriving stock (Show, Eq, Ord, Generic)
   deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
 
-type IntegerParseConstraint a =
+type IntegerConstraint a =
   (Aeson.FromJSON a, Aeson.ToJSON a, Show a, Integral a, Ord a, Reflection.Typeable a)
 
 ---
 
 data StringFormat a where
+  -- | No format
   NoStringFormat :: StringFormat Text
+
+  -- | @byte@ format
   ByteFormat :: StringFormat ByteString
+
+  -- | @binary@ format
   BinaryFormat :: StringFormat Text
+
+  -- | @date@ format
   DateFormat :: StringFormat Day
+
+  -- | @date-time@ format
   DateTimeFormat :: StringFormat UTCTime
+
+  -- | @password@ format
   PasswordFormat :: StringFormat Text
 
 deriving instance Show (StringFormat a)

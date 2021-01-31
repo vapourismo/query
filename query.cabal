@@ -24,7 +24,8 @@ library
                     text,
                     time,
                     unordered-containers,
-                    vector
+                    vector,
+                    openapi3
   hs-source-dirs:   src
   exposed-modules:  Data.Query
                     Data.Query.Decode
@@ -41,6 +42,7 @@ library
                     Data.Query.Generic.Options
                     Data.Query.Primitives
                     Data.Query.Primitives.JSON
+                    Data.Query.Primitives.OpenAPI3
                     Data.Query.Schema
                     Data.Query.Schema.Types
                     Data.Query.Shape
