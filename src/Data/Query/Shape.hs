@@ -76,7 +76,7 @@ prettyShapeF = \case
   where
     inAngles = Pretty.encloseSep Pretty.langle Pretty.rangle Pretty.comma
 
-    inBraces = Pretty.encloseSep Pretty.lbrace Pretty.rbrace Pretty.comma
+    inBraces = Pretty.encloseSep Pretty.lbrace Pretty.rbrace (Pretty.comma <> Pretty.space)
 
     typed name typ = name Pretty.<+> Pretty.colon Pretty.<+> typ
 
