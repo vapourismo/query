@@ -75,6 +75,11 @@ module Data.Query.Schema
   , fieldWith
   , optionalField
   , optionalFieldWith
+
+    -- * Shapes
+  , Types.querySchemaToQueryShape
+  , Types.schemaToShape
+  , Types.fieldsSchemaToFieldShapes
   )
 where
 
