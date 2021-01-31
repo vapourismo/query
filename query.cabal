@@ -46,5 +46,6 @@ library
                     Data.Query.Schema
                     Data.Query.Schema.Types
                     Data.Query.Shape
+                    Data.Query.Shape.OpenAPI3
                     Data.Query.Value
   other-modules:    Data.Query.Utilities
