@@ -4,8 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Query.Decode.JSON
-  ( Types.DecodeContext (..)
-  , evalQuery
+  ( evalQuery
   , evalDecoder
   , evalFieldDecoder
   , parseJsonWith
@@ -14,55 +13,60 @@ module Data.Query.Decode.JSON
 where
 
 import           Control.Applicative.Free (runAp)
+import           Control.Monad (join)
 import qualified Data.Aeson.Types as Aeson
 import           Data.Functor.Coyoneda (Coyoneda (Coyoneda), hoistCoyoneda, lowerCoyoneda)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Decode.Types as Types
+import qualified Data.Query.Evaluate as Evaluate
 import qualified Data.Query.Primitives.JSON as Primitives
 import qualified Data.Query.Types as Types
 import qualified Data.Query.Value as Value
 
+throwDecodeError :: Types.DecodeError -> Evaluate.Evaluate m a
+throwDecodeError = Evaluate.throwEvaluateError . Evaluate.DecodeError
+
 evalFieldDecoder
   :: forall a m
-  .  Types.DecodeContext m
+  .  Monad m
   => Decode.FieldsDecoder a
   -> Value.Object
-  -> m a
+  -> Evaluate.Evaluate m a
 evalFieldDecoder fieldDecoder queryObject =
   runAp reduce $ Types.unFieldDecoder fieldDecoder
   where
-    reduce :: forall x. Types.FieldQuery x -> m x
+    reduce :: forall x. Types.FieldQuery x -> Evaluate.Evaluate m x
     reduce = \case
       Types.MandatoryFieldQuery name query ->
         case HashMap.lookup name queryObject of
           Just fieldValue ->
-            Types.nestDecodeError (Types.FieldPath name) $ evalQuery query fieldValue
+            Evaluate.nestEvaluateError (Types.FieldPath name) $ evalQuery query fieldValue
 
           Nothing ->
-            Types.throwDecodeError $ Types.MissingField name
+            throwDecodeError $ Types.MissingField name
 
       Types.OptionalFieldQuery name query ->
         case HashMap.lookup name queryObject of
           Just fieldValue ->
-            Types.nestDecodeError (Types.FieldPath name) $ Just <$> evalQuery query fieldValue
+            Evaluate.nestEvaluateError (Types.FieldPath name) $ Just <$> evalQuery query fieldValue
 
           Nothing ->
             pure Nothing
 
 evalDecoder
-  :: Types.DecodeContext m
+  :: Monad m
   => Decode.Decoder b
   -> Value.NoCallValue
-  -> m b
+  -> Evaluate.Evaluate m b
 evalDecoder decoder value =
   lowerCoyoneda $ hoistCoyoneda (`evalDecoderBase` value) $ Types.unDecoder decoder
 
 evalDecoderBase
-  :: Types.DecodeContext m
+  :: Monad m
   => Types.DecoderBase a
   -> Value.NoCallValue
-  -> m a
+  -> Evaluate.Evaluate m a
 evalDecoderBase decoder queryValue =
   case decoder of
     Types.PrimitiveDecoder prim ->
@@ -91,7 +95,7 @@ evalDecoderBase decoder queryValue =
               pure value
 
             Nothing ->
-              Types.throwDecodeError $ Types.UnknownEnum (HashMap.keysSet valueMapping) string
+              throwDecodeError $ Types.UnknownEnum (HashMap.keysSet valueMapping) string
 
         queryValue -> throwUnexpected queryValue
 
@@ -100,15 +104,14 @@ evalDecoderBase decoder queryValue =
         Value.Object fields ->
           case HashMap.toList (HashMap.intersectionWith (,) allVariants fields) of
             [] ->
-              Types.throwDecodeError $
-                Types.NoMatchingConstructor (HashMap.keysSet allVariants) fields
+              throwDecodeError $ Types.NoMatchingConstructor (HashMap.keysSet allVariants) fields
 
             [(name, (Types.ConstructorQuery (Coyoneda f decoder), queryValue))] ->
-              Types.nestDecodeError (Types.ConstructorPath name) $
+              Evaluate.nestEvaluateError (Types.ConstructorPath name) $
                 f <$> evalQuery decoder queryValue
 
             matches ->
-              Types.throwDecodeError $ Types.MultipleConstructors $
+              throwDecodeError $ Types.MultipleConstructors $
                 map
                   (\(name, (decoder, value)) -> Types.ConstructorMatch name decoder value)
                   matches
@@ -121,25 +124,29 @@ evalDecoderBase decoder queryValue =
         queryValue          -> throwUnexpected queryValue
 
   where
-    throwUnexpected = Types.throwDecodeError . Types.UnexpectedInput decoder
+    throwUnexpected = throwDecodeError . Types.UnexpectedInput decoder
 
 evalQuery
-  :: Types.DecodeContext m
+  :: Monad m
   => Decode.Query a
   -> Value.Value
-  -> m a
+  -> Evaluate.Evaluate m a
 evalQuery (Types.Query typeRep mbDecoder) = \case
   Value.Call (Value.CallValue name args) ->
-    Types.callFunction typeRep name args
+    Evaluate.withFunction name typeRep $ \argsDecoder ->
+      Evaluate.withEvaluate join $ evalFieldDecoder argsDecoder args
 
   Value.NoCall queryValue ->
     case mbDecoder of
       Just decoder -> evalDecoder decoder queryValue
-      Nothing -> Types.throwDecodeError $ Types.UndecodableNeedsCall typeRep queryValue
+      Nothing -> throwDecodeError $ Types.UndecodableNeedsCall typeRep queryValue
 
 parseJsonWith :: Decode.Decoder a -> Aeson.Value -> Aeson.Parser a
 parseJsonWith decoder value =
-  evalDecoder decoder $ Value.toNoCallValue value
+  either (fail . show) id
+  $ Evaluate.runEvaluate (error "No function calls are allowed when only parsing")
+  $ evalDecoder decoder
+  $ Value.toNoCallValue value
 
 parseJson :: Decode.HasDecoder a => Aeson.Value -> Aeson.Parser a
 parseJson = parseJsonWith Decode.decoder
