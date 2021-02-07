@@ -26,12 +26,25 @@ module Data.Query.Schema
 
     -- * Primitives
   , bool
+
   , float
   , double
   , number
+
+  , int8
+  , int16
   , int32
   , int64
+  , int
   , integer
+
+  , word8
+  , word16
+  , word32
+  , word64
+  , word
+  , natural
+
   , string
 
     -- * Nullables
@@ -88,7 +101,7 @@ import           Data.ByteString (ByteString)
 import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix), unFix)
 import qualified Data.HashMap.Strict as HashMap
-import           Data.Int (Int32, Int64)
+import           Data.Int (Int16, Int32, Int64, Int8)
 import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (dimap), lmap)
 import           Data.Profunctor.Yoneda (Coyoneda (Coyoneda), returnCoyoneda)
@@ -103,6 +116,8 @@ import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import           Data.Time (Day, UTCTime)
 import qualified Data.Vector as Vector
+import           Data.Word (Word16, Word32, Word64, Word8)
+import           Numeric.Natural (Natural)
 import qualified Type.Reflection as Reflection
 
 -- * Classes
@@ -128,14 +143,41 @@ instance HasSchema Double where
 instance HasSchema Scientific where
   schema = number
 
-instance HasSchema Int32  where
+instance HasSchema Int8 where
+  schema = int8
+
+instance HasSchema Int16 where
+  schema = int16
+
+instance HasSchema Int32 where
   schema = int32
 
 instance HasSchema Int64 where
   schema = int64
 
+instance HasSchema Int where
+  schema = int
+
 instance HasSchema Integer where
   schema = integer
+
+instance HasSchema Word8 where
+  schema = word8
+
+instance HasSchema Word16 where
+  schema = word16
+
+instance HasSchema Word32 where
+  schema = word32
+
+instance HasSchema Word64 where
+  schema = word64
+
+instance HasSchema Word where
+  schema = word
+
+instance HasSchema Natural where
+  schema = natural
 
 instance HasSchema Text where
   schema = string
@@ -385,6 +427,27 @@ number = primitive $ Primitives.Number Primitives.NumberInfo
   , Primitives.numberInfo_upperLimit = Primitives.NoLimit
   }
 
+boundedIntegral
+  :: forall a b
+  .  (Num a, Integral a, Integral b, Bounded a)
+  => Primitives.IntegerFormat b
+  -> Types.Schema a a
+boundedIntegral format =
+  dimap fromIntegral fromIntegral $ primitive $ Primitives.Integer Primitives.IntegerInfo
+    { Primitives.integerInfo_format = format
+    , Primitives.integerInfo_lowerLimit = Primitives.InclusiveLimit $ fromIntegral $ minBound @a
+    , Primitives.integerInfo_upperLimit = Primitives.InclusiveLimit $ fromIntegral $ maxBound @a
+    , Primitives.integerInfo_multipleOf = Nothing
+    }
+
+-- | Int8 schema
+int8 :: Types.Schema Int8 Int8
+int8 = boundedIntegral Primitives.Int32Format
+
+-- | Int16 schema
+int16 :: Types.Schema Int16 Int16
+int16 = boundedIntegral Primitives.Int32Format
+
 -- | Int32 schema
 int32 :: Types.Schema Int32 Int32
 int32 = primitive $ Primitives.Integer Primitives.IntegerInfo
@@ -403,11 +466,44 @@ int64 = primitive $ Primitives.Integer Primitives.IntegerInfo
   , Primitives.integerInfo_multipleOf = Nothing
   }
 
+-- | Int schema
+int :: Types.Schema Int Int
+int = boundedIntegral Primitives.NoIntegerFormat
+
 -- | Integer schema
 integer :: Types.Schema Integer Integer
 integer = primitive $ Primitives.Integer Primitives.IntegerInfo
   { Primitives.integerInfo_format = Primitives.NoIntegerFormat
   , Primitives.integerInfo_lowerLimit = Primitives.NoLimit
+  , Primitives.integerInfo_upperLimit = Primitives.NoLimit
+  , Primitives.integerInfo_multipleOf = Nothing
+  }
+
+-- | Word8 schema
+word8 :: Types.Schema Word8 Word8
+word8 = boundedIntegral Primitives.NoIntegerFormat
+
+-- | Word16 schema
+word16 :: Types.Schema Word16 Word16
+word16 = boundedIntegral Primitives.NoIntegerFormat
+
+-- | Word32 schema
+word32 :: Types.Schema Word32 Word32
+word32 = boundedIntegral Primitives.NoIntegerFormat
+
+-- | Word64 schema
+word64 :: Types.Schema Word64 Word64
+word64 = boundedIntegral Primitives.NoIntegerFormat
+
+-- | Word schema
+word :: Types.Schema Word Word
+word = boundedIntegral Primitives.NoIntegerFormat
+
+-- | Natural schema
+natural :: Types.Schema Natural Natural
+natural = dimap toInteger fromInteger $ primitive $ Primitives.Integer Primitives.IntegerInfo
+  { Primitives.integerInfo_format = Primitives.NoIntegerFormat
+  , Primitives.integerInfo_lowerLimit = Primitives.InclusiveLimit 0
   , Primitives.integerInfo_upperLimit = Primitives.NoLimit
   , Primitives.integerInfo_multipleOf = Nothing
   }

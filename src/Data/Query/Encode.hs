@@ -21,12 +21,25 @@ module Data.Query.Encode
 
     -- * Primitives
   , bool
+
   , float
   , double
   , number
+
+  , int8
+  , int16
   , int32
   , int64
+  , int
   , integer
+
+  , word8
+  , word16
+  , word32
+  , word64
+  , word
+  , natural
+
   , string
 
     -- * Nullables
@@ -85,7 +98,7 @@ import           Data.Fix (Fix, unFix)
 import           Data.Functor.Contravariant (Contravariant (contramap))
 import qualified Data.Functor.Contravariant.Coyoneda as Contravariant.Coyoneda
 import qualified Data.HashMap.Strict as HashMap
-import           Data.Int (Int32, Int64)
+import           Data.Int (Int16, Int32, Int64, Int8)
 import qualified Data.IntMap.Strict as IntMap
 import           Data.Maybe (fromMaybe)
 import           Data.Profunctor (Profunctor (..))
@@ -102,6 +115,8 @@ import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
+import           Data.Word (Word16, Word32, Word64, Word8)
+import           Numeric.Natural (Natural)
 import qualified Type.Reflection as Reflection
 
 -- * Classes
@@ -134,13 +149,40 @@ instance HasEncoder Double where
 instance HasEncoder Scientific where
   encoder = schemaEncoder
 
+instance HasEncoder Int8 where
+  encoder = schemaEncoder
+
+instance HasEncoder Int16 where
+  encoder = schemaEncoder
+
 instance HasEncoder Int32 where
   encoder = schemaEncoder
 
 instance HasEncoder Int64 where
   encoder = schemaEncoder
 
+instance HasEncoder Int where
+  encoder = schemaEncoder
+
 instance HasEncoder Integer where
+  encoder = schemaEncoder
+
+instance HasEncoder Word8 where
+  encoder = schemaEncoder
+
+instance HasEncoder Word16 where
+  encoder = schemaEncoder
+
+instance HasEncoder Word32 where
+  encoder = schemaEncoder
+
+instance HasEncoder Word64 where
+  encoder = schemaEncoder
+
+instance HasEncoder Word where
+  encoder = schemaEncoder
+
+instance HasEncoder Natural where
   encoder = schemaEncoder
 
 instance HasEncoder Text where
@@ -234,6 +276,14 @@ double = schemaEncoder
 number :: Types.Encoder Scientific
 number = schemaEncoder
 
+-- | Int8 encoder
+int8 :: Types.Encoder Int8
+int8 = schemaEncoder
+
+-- | Int16 encoder
+int16 :: Types.Encoder Int16
+int16 = schemaEncoder
+
 -- | Int32 encoder
 int32 :: Types.Encoder Int32
 int32 = schemaEncoder
@@ -242,9 +292,37 @@ int32 = schemaEncoder
 int64 :: Types.Encoder Int64
 int64 = schemaEncoder
 
+-- | Int encoder
+int :: Types.Encoder Int
+int = schemaEncoder
+
 -- | Integer encoder
 integer :: Types.Encoder Integer
 integer = schemaEncoder
+
+-- | Word8 encoder
+word8 :: Types.Encoder Word8
+word8 = schemaEncoder
+
+-- | Word16 encoder
+word16 :: Types.Encoder Word16
+word16 = schemaEncoder
+
+-- | Word32 encoder
+word32 :: Types.Encoder Word32
+word32 = schemaEncoder
+
+-- | Word64 encoder
+word64 :: Types.Encoder Word64
+word64 = schemaEncoder
+
+-- | Word encoder
+word :: Types.Encoder Word
+word = schemaEncoder
+
+-- | Natural encoder
+natural :: Types.Encoder Natural
+natural = schemaEncoder
 
 -- | String encoder
 string :: Types.Encoder Text

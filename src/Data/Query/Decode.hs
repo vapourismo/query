@@ -28,12 +28,25 @@ module Data.Query.Decode
 
     -- * Primitives
   , bool
+
   , float
   , double
   , number
+
+  , int8
+  , int16
   , int32
   , int64
+  , int
   , integer
+
+  , word8
+  , word16
+  , word32
+  , word64
+  , word
+  , natural
+
   , string
 
     -- * Nullables
@@ -88,7 +101,7 @@ import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix))
 import qualified Data.Functor.Coyoneda as Coyoneda
 import qualified Data.HashMap.Strict as HashMap
-import           Data.Int (Int32, Int64)
+import           Data.Int (Int16, Int32, Int64, Int8)
 import           Data.Kind (Type)
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
@@ -104,6 +117,8 @@ import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
+import           Data.Word (Word16, Word32, Word64, Word8)
+import           Numeric.Natural (Natural)
 import qualified Type.Reflection as Reflection
 
 -- * Classes
@@ -129,13 +144,40 @@ instance HasDecoder Double where
 instance HasDecoder Scientific where
   decoder = schemaDecoder
 
+instance HasDecoder Int8 where
+  decoder = schemaDecoder
+
+instance HasDecoder Int16 where
+  decoder = schemaDecoder
+
 instance HasDecoder Int32 where
   decoder = schemaDecoder
 
 instance HasDecoder Int64 where
   decoder = schemaDecoder
 
+instance HasDecoder Int where
+  decoder = schemaDecoder
+
 instance HasDecoder Integer where
+  decoder = schemaDecoder
+
+instance HasDecoder Word8 where
+  decoder = schemaDecoder
+
+instance HasDecoder Word16 where
+  decoder = schemaDecoder
+
+instance HasDecoder Word32 where
+  decoder = schemaDecoder
+
+instance HasDecoder Word64 where
+  decoder = schemaDecoder
+
+instance HasDecoder Word where
+  decoder = schemaDecoder
+
+instance HasDecoder Natural where
   decoder = schemaDecoder
 
 instance HasDecoder Text where
@@ -257,6 +299,14 @@ double = schemaDecoder
 number :: Types.Decoder Scientific
 number = schemaDecoder
 
+-- | Int8 decoder
+int8 :: Types.Decoder Int8
+int8 = schemaDecoder
+
+-- | Int16 decoder
+int16 :: Types.Decoder Int16
+int16 = schemaDecoder
+
 -- | Int32 decoder
 int32 :: Types.Decoder Int32
 int32 = schemaDecoder
@@ -265,9 +315,37 @@ int32 = schemaDecoder
 int64 :: Types.Decoder Int64
 int64 = schemaDecoder
 
+-- | Int decoder
+int :: Types.Decoder Int
+int = schemaDecoder
+
 -- | Integer decoder
 integer :: Types.Decoder Integer
 integer = schemaDecoder
+
+-- | Word8 decoder
+word8 :: Types.Decoder Word8
+word8 = schemaDecoder
+
+-- | Word16 decoder
+word16 :: Types.Decoder Word16
+word16 = schemaDecoder
+
+-- | Word32 decoder
+word32 :: Types.Decoder Word32
+word32 = schemaDecoder
+
+-- | Word64 decoder
+word64 :: Types.Decoder Word64
+word64 = schemaDecoder
+
+-- | Word decoder
+word :: Types.Decoder Word
+word = schemaDecoder
+
+-- | Natural decoder
+natural :: Types.Decoder Natural
+natural = schemaDecoder
 
 -- | String decoder
 string :: Types.Decoder Text
