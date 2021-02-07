@@ -22,8 +22,8 @@ import qualified Data.HashSet as HashSet
 import qualified Data.Query.Encode as Encode
 import qualified Data.Query.Encode.Types as Types
 import qualified Data.Query.Primitives as Primitives
-import qualified Data.Query.Schema.Types as Types
 import qualified Data.Query.Shape as Shape
+import qualified Data.Query.Types as Types
 import qualified Data.SOP as SOP
 import           Data.Text (Text, pack)
 import qualified Data.Text.Encoding as Text

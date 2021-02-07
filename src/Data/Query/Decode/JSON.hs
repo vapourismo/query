@@ -21,7 +21,7 @@ import qualified Data.Query.Decode as Decode
 import qualified Data.Query.Decode.Types as Types
 import qualified Data.Query.Evaluate as Evaluate
 import qualified Data.Query.Primitives.JSON as Primitives
-import qualified Data.Query.Schema.Types as Schema
+import qualified Data.Query.Types as Types
 import qualified Data.Query.Value as Value
 
 throwError :: Types.DecodeError -> Evaluate.Evaluate m a
@@ -41,7 +41,7 @@ evalFieldDecoder fieldDecoder queryObject =
       Types.MandatoryFieldQuery name query ->
         case HashMap.lookup name queryObject of
           Just fieldValue ->
-            Evaluate.nestQueryError (Schema.FieldPath name) $ evalQuery query fieldValue
+            Evaluate.nestQueryError (Types.FieldPath name) $ evalQuery query fieldValue
 
           Nothing ->
             throwError $ Types.MissingField name
@@ -49,7 +49,7 @@ evalFieldDecoder fieldDecoder queryObject =
       Types.OptionalFieldQuery name query ->
         case HashMap.lookup name queryObject of
           Just fieldValue ->
-            Evaluate.nestQueryError (Schema.FieldPath name) $ Just <$> evalQuery query fieldValue
+            Evaluate.nestQueryError (Types.FieldPath name) $ Just <$> evalQuery query fieldValue
 
           Nothing ->
             pure Nothing
@@ -102,9 +102,8 @@ evalDecoderBase decoder queryValue =
           case HashMap.toList (HashMap.intersectionWith (,) allVariants fields) of
             [] -> throwError $ Types.NoMatchingConstructor (HashMap.keysSet allVariants) fields
 
-
             [(name, (Types.ConstructorQuery (Coyoneda f decoder), queryValue))] ->
-              Evaluate.nestQueryError (Schema.ConstructorPath name) $
+              Evaluate.nestQueryError (Types.ConstructorPath name) $
                 f <$> evalQuery decoder queryValue
 
             matches ->

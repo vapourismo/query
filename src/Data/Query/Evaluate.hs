@@ -29,7 +29,7 @@ import           Data.Bifunctor (Bifunctor (first))
 import           Data.Functor.Compose (Compose (Compose), getCompose)
 import qualified Data.Query.Decode.Types as Decode
 import qualified Data.Query.Encode.Types as Encode
-import qualified Data.Query.Schema.Types as Schema
+import qualified Data.Query.Types as Types
 import qualified Data.Query.Value as Value
 import           Data.Text (Text)
 import qualified Type.Reflection as Reflection
@@ -44,7 +44,7 @@ data EvaluateError
   | ResolveError ResolveError
   deriving Show
 
-data LocatedEvaluateError = LocatedEvaluateError [Schema.Path] EvaluateError
+data LocatedEvaluateError = LocatedEvaluateError [Types.Path] EvaluateError
   deriving Show
 
 data TopLevel m where
@@ -75,7 +75,7 @@ withEvaluate f = Evaluate . Compose . fmap f . getCompose . unEvaluate
 throwQueryError :: EvaluateError -> Evaluate m a
 throwQueryError = Evaluate . Compose . Except.throwError . LocatedEvaluateError []
 
-nestQueryError :: Schema.Path -> Evaluate m a -> Evaluate m a
+nestQueryError :: Types.Path -> Evaluate m a -> Evaluate m a
 nestQueryError path (Evaluate (Compose inner)) =
   Evaluate $ Compose $ Reader.mapReaderT (first addPath) inner
   where

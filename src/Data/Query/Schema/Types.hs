@@ -27,8 +27,6 @@ import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
 import           Data.Text (Text)
 import           Data.Vector (Vector)
-import           GHC.Generics (Generic)
-import qualified Generics.SOP as Generics
 import qualified Prettyprinter as Pretty
 import qualified Type.Reflection as Reflection
 
@@ -190,17 +188,3 @@ querySchemaToQueryShape query = Fix Shape.QueryShape
   , Shape.queryShape_shape =
       either (const Nothing) (Just . schemaToShape) $ querySchema_schema query
   }
-
--- | Path into an encoded 'Data.Query.Value.Value', 'Schema', 'Data.Query.Decode.Types.Decoder'
--- or 'Data.Query.Encode.Types.Encoder'
-data Path
-  = ArrayPath
-  -- ^ Items of an array
-  | StringMapPath
-  -- ^ Mapping value of a string map
-  | ConstructorPath Text
-  -- ^ Variant constructor body
-  | FieldPath Text
-  -- ^ Record field
-  deriving stock (Show, Eq, Ord, Generic)
-  deriving anyclass (Generics.Generic, Generics.HasDatatypeInfo)
