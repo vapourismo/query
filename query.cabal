@@ -43,6 +43,7 @@ library
                     Data.Query.Primitives
                     Data.Query.Primitives.JSON
                     Data.Query.Primitives.OpenAPI3
+                    Data.Query.Resolver
                     Data.Query.Schema
                     Data.Query.Schema.Types
                     Data.Query.Shape
