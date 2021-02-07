@@ -82,13 +82,13 @@ mkResolver funs =
                 Evaluate.withEvaluate (>>= call) (Decode.JSON.evalFieldDecoder decode args)
 
             _ ->
-              Evaluate.throwQueryError
+              Evaluate.throwEvaluateError
               $ Evaluate.ResolveError
               $ Evaluate.FunctionReturnTypeMismatch name targetTyp
               $ HashMap.keys
               $ functionsByType functions
 
-        _ -> Evaluate.throwQueryError $ Evaluate.ResolveError $ Evaluate.UnknownFunction name
+        _ -> Evaluate.throwEvaluateError $ Evaluate.ResolveError $ Evaluate.UnknownFunction name
 
     resolveTopLevel :: Text -> Value.Object -> [Evaluate.TopLevel m]
     resolveTopLevel name args =

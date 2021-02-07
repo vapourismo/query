@@ -10,8 +10,8 @@ module Data.Query.Evaluate
   , runEvaluate
   , withEvaluate
 
-  , throwQueryError
-  , nestQueryError
+  , throwEvaluateError
+  , nestEvaluateError
 
   , TopLevel (..)
   , Resolver (..)
@@ -66,9 +66,9 @@ instance Trans.MonadTrans Evaluate where
   lift = Evaluate . Compose . pure
 
 instance Applicative m => Decode.DecodeContext (Evaluate m) where
-  throwDecodeError = throwQueryError . DecodeError
+  throwDecodeError = throwEvaluateError . DecodeError
 
-  nestDecodeError = nestQueryError
+  nestDecodeError = nestEvaluateError
 
   callFunction typeRep name args = Evaluate $ Compose $ do
     Resolver resolve _ <- Reader.ask
@@ -81,13 +81,11 @@ runEvaluate resolver evaluate =
 withEvaluate :: (m a -> m b) -> Evaluate m a -> Evaluate m b
 withEvaluate f = Evaluate . Compose . fmap f . getCompose . unEvaluate
 
--- TODO: Rename to throwEvaluateError
-throwQueryError :: EvaluateError -> Evaluate m a
-throwQueryError = Evaluate . Compose . Except.throwError . LocatedEvaluateError []
+throwEvaluateError :: EvaluateError -> Evaluate m a
+throwEvaluateError = Evaluate . Compose . Except.throwError . LocatedEvaluateError []
 
--- TODO: Rename to nestEvaluateError
-nestQueryError :: Types.Path -> Evaluate m a -> Evaluate m a
-nestQueryError path (Evaluate (Compose inner)) =
+nestEvaluateError :: Types.Path -> Evaluate m a -> Evaluate m a
+nestEvaluateError path (Evaluate (Compose inner)) =
   Evaluate $ Compose $ Reader.mapReaderT (first addPath) inner
   where
     addPath (LocatedEvaluateError paths error) = LocatedEvaluateError (path : paths) error
