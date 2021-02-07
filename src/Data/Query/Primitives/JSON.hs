@@ -18,23 +18,17 @@ where
 import qualified Codec.Base64 as Base64
 import           Control.Monad ((<=<))
 import qualified Data.Aeson as Aeson
-import           Data.Bifunctor (Bifunctor (first))
 import qualified Data.Query.Decode.Types as Decode
-import qualified Data.Query.Evaluate as Evaluate
 import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Value as Value
 import qualified Data.Text as Text
 
-throwDecodeError :: Decode.DecodeError -> Evaluate.Evaluate m a
-throwDecodeError = Evaluate.throwEvaluateError . Evaluate.DecodeError
-
 decodeNumber
-  :: Applicative m
-  => Primitives.NumberInfo a
+  :: Primitives.NumberInfo a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> Either Decode.DecodeError a
 decodeNumber info value =
-  Primitives.reifyNumberConstraints (Primitives.numberInfo_format info) $ lift $ do
+  Primitives.reifyNumberConstraints (Primitives.numberInfo_format info) $ do
     number <-
       case value of
         Value.Number number ->
@@ -44,30 +38,29 @@ decodeNumber info value =
 
         _ -> Left $ Decode.UnexpectedInput decoder value
 
-    first (Decode.BadPrimitive value . Text.pack) $ do
-      case Primitives.numberInfo_lowerLimit info of
-        Primitives.InclusiveLimit limit | number < limit ->
-          Left $ show number <> " < " <> show limit
+    let badPrimError = Left . Decode.BadPrimitive value . Text.pack
 
-        Primitives.ExclusiveLimit limit | number <= limit ->
-          Left $ show number <> " <= " <> show limit
+    case Primitives.numberInfo_lowerLimit info of
+      Primitives.InclusiveLimit limit | number < limit ->
+        badPrimError $ show number <> " < " <> show limit
 
-        _ -> pure ()
+      Primitives.ExclusiveLimit limit | number <= limit ->
+        badPrimError $ show number <> " <= " <> show limit
 
-      case Primitives.numberInfo_upperLimit info of
-        Primitives.InclusiveLimit limit | number > limit ->
-          Left $ show number <> " > " <> show limit
+      _ -> Right ()
 
-        Primitives.ExclusiveLimit limit | number >= limit ->
-          Left $ show number <> " >= " <> show limit
+    case Primitives.numberInfo_upperLimit info of
+      Primitives.InclusiveLimit limit | number > limit ->
+        badPrimError $ show number <> " > " <> show limit
 
-        _ -> pure ()
+      Primitives.ExclusiveLimit limit | number >= limit ->
+        badPrimError $ show number <> " >= " <> show limit
 
-    pure number
+      _ -> Right ()
+
+    Right number
   where
     decoder = Decode.PrimitiveDecoder $ Primitives.Number info
-
-    lift = either throwDecodeError pure
 
 encodeNumber
   :: Primitives.NumberInfo a
@@ -77,51 +70,49 @@ encodeNumber info =
   Primitives.reifyNumberConstraints (Primitives.numberInfo_format info) Aeson.toJSON
 
 decodeInteger
-  :: Applicative m
-  => Primitives.IntegerInfo a
+  :: Primitives.IntegerInfo a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> Either Decode.DecodeError a
 decodeInteger info value =
-  Primitives.reifyIntegerConstraints (Primitives.integerInfo_format info) $ lift $ do
+  Primitives.reifyIntegerConstraints (Primitives.integerInfo_format info) $ do
     integer <-
       case value of
         Value.Number integer ->
           case Aeson.fromJSON (Aeson.Number integer) of
-            Aeson.Success x -> Right x
+            Aeson.Success x -> pure x
             Aeson.Error msg -> Left $ Decode.BadPrimitive value $ Text.pack msg
 
         _ -> Left $ Decode.UnexpectedInput decoder value
 
-    first (Decode.BadPrimitive value . Text.pack) $ do
-      case Primitives.integerInfo_lowerLimit info of
-        Primitives.InclusiveLimit limit | integer < limit ->
-          Left $ show integer <> " < " <> show limit
+    let badPrimError = Left . Decode.BadPrimitive value . Text.pack
 
-        Primitives.ExclusiveLimit limit | integer <= limit ->
-          Left $ show integer <> " <= " <> show limit
+    case Primitives.integerInfo_lowerLimit info of
+      Primitives.InclusiveLimit limit | integer < limit ->
+        badPrimError $ show integer <> " < " <> show limit
 
-        _ -> pure ()
+      Primitives.ExclusiveLimit limit | integer <= limit ->
+        badPrimError $ show integer <> " <= " <> show limit
 
-      case Primitives.integerInfo_upperLimit info of
-        Primitives.InclusiveLimit limit | integer > limit ->
-          Left $ show integer <> " > " <> show limit
+      _ -> Right ()
 
-        Primitives.ExclusiveLimit limit | integer >= limit ->
-          Left $ show integer <> " >= " <> show limit
+    case Primitives.integerInfo_upperLimit info of
+      Primitives.InclusiveLimit limit | integer > limit ->
+        badPrimError $ show integer <> " > " <> show limit
 
-        _ -> Right ()
+      Primitives.ExclusiveLimit limit | integer >= limit ->
+        badPrimError $ show integer <> " >= " <> show limit
 
-      case Primitives.integerInfo_multipleOf info of
-        Just multiple | mod integer multiple /= 0 ->
-          Left $ show integer <> " is not a multiple of " <> show multiple
+      _ -> Right ()
 
-        _ -> Right ()
+    case Primitives.integerInfo_multipleOf info of
+      Just multiple | mod integer multiple /= 0 ->
+        badPrimError $ show integer <> " is not a multiple of " <> show multiple
 
-    pure integer
+      _ -> Right ()
+
+    Right integer
   where
     decoder = Decode.PrimitiveDecoder $ Primitives.Integer info
-
-    lift = either throwDecodeError pure
 
 encodeInteger
   :: Primitives.IntegerInfo a
@@ -131,19 +122,18 @@ encodeInteger info =
   Primitives.reifyIntegerConstraints (Primitives.integerInfo_format info) Aeson.toJSON
 
 decodeString
-  :: forall a m
-  .  Applicative m
-  => Primitives.StringFormat a
+  :: forall a
+  .  Primitives.StringFormat a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> Either Decode.DecodeError a
 decodeString format value =
   case value of
     Value.String string ->
       case parse (Aeson.String string) of
         Aeson.Success x -> pure x
-        Aeson.Error msg -> throwDecodeError $ Decode.BadPrimitive value $ Text.pack msg
+        Aeson.Error msg -> Left $ Decode.BadPrimitive value $ Text.pack msg
 
-    _ -> throwDecodeError $ Decode.UnexpectedInput decoder value
+    _ -> Left $ Decode.UnexpectedInput decoder value
   where
     decoder = Decode.PrimitiveDecoder $ Primitives.String format
 
@@ -167,15 +157,13 @@ encodeString = \case
   Primitives.PasswordFormat -> Aeson.toJSON
 
 decodePrimitive
-  :: Applicative m
-  => Primitives.Primitive a
+  :: Primitives.Primitive a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> Either Decode.DecodeError a
 decodePrimitive = \case
   Primitives.Boolean -> \case
     Value.Bool bool -> pure bool
-    value -> throwDecodeError $
-      Decode.UnexpectedInput (Decode.PrimitiveDecoder Primitives.Boolean) value
+    value -> Left $ Decode.UnexpectedInput (Decode.PrimitiveDecoder Primitives.Boolean) value
 
   Primitives.Number info -> decodeNumber info
   Primitives.Integer info -> decodeInteger info

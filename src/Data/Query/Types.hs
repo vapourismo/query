@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -7,6 +8,12 @@ module Data.Query.Types where
 import           Data.Text (Text)
 import           GHC.Generics (Generic)
 import qualified Generics.SOP as Generics
+
+data Located a = Located
+  { located_path :: [Path]
+  , located_subject :: a
+  }
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
 -- | Path into an encoded 'Data.Query.Value.Value', 'Schema', 'Data.Query.Decode.Types.Decoder'
 -- or 'Data.Query.Encode.Types.Encoder'

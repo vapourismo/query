@@ -10,6 +10,7 @@
 module Data.Query.Decode.Types where
 
 import           Control.Applicative.Free (Ap, runAp_)
+import qualified Data.Aeson.Types as Aeson
 import           Data.Fix (Fix (Fix), foldFix)
 import           Data.Functor.Coyoneda (Coyoneda (..))
 import qualified Data.HashMap.Strict as HashMap
@@ -167,3 +168,9 @@ data DecodeError
   | BadPrimitive Value.NoCallValue Text
 
 deriving instance Show DecodeError
+
+class Applicative f => CanCallFunction f where
+  callFunction :: Text -> Reflection.TypeRep a -> Value.Object -> f a
+
+instance CanCallFunction Aeson.Parser where
+  callFunction _ _ _ = fail "Cannot call function when parsing via Aeson"
