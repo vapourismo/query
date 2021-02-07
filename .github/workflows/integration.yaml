@@ -18,7 +18,8 @@ jobs:
       matrix:
         ghc:
           - latest
-          - "8.10.3"
+          - "9.0.1"
+          - "8.10.4"
           - "8.8.4"
     steps:
       - uses: actions/checkout@v2
