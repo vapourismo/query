@@ -21,15 +21,14 @@ import qualified Type.Reflection as Reflection
 data Function m where
   Function
     :: Text
-    -> Decode.FieldsDecoder a
+    -> Decode.FieldsDecoder (m b)
     -> Reflection.TypeRep b
     -> Maybe (Encode.Encoder b)
-    -> (a -> m b)
     -> Function m
 
 instance Show (Function m) where
   show = \case
-    Function name decode returnType encode _ ->
+    Function name decode returnType encode ->
       Text.unpack name <> " : " <> show decode <> " -> " <> maybe (show returnType) show encode
 
 function
@@ -46,8 +45,8 @@ functionWith
   -> Decode.FieldsDecoder a
   -> (a -> m b)
   -> Function m
-functionWith name decode =
-  Function name decode Reflection.typeRep Nothing
+functionWith name decode f =
+  Function name (f <$> decode) Reflection.typeRep Nothing
 
 topLevelFunction
   :: (Decode.HasFieldsDecoder a, Encode.HasEncoder b, Reflection.Typeable b)
@@ -64,10 +63,9 @@ topLevelFunctionWith
   -> Encode.Encoder b
   -> (a -> m b)
   -> Function m
-topLevelFunctionWith name decode encode =
-  Function name decode Reflection.typeRep (Just encode)
+topLevelFunctionWith name decode encode f =
+  Function name (f <$> decode) Reflection.typeRep (Just encode)
 
 mapFunction :: (forall x. m x -> n x) -> Function m -> Function n
-mapFunction f = \case
-  Function name decode returnType encode g ->
-    Function name decode returnType encode (f . g)
+mapFunction f (Function name decode returnType encode) =
+  Function name (f <$> decode) returnType encode

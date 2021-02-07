@@ -22,6 +22,7 @@ module Data.Query
   )
 where
 
+import           Control.Monad (join)
 import qualified Data.Aeson as Aeson
 import           Data.Bifunctor (Bifunctor (first))
 import           Data.Either (lefts, rights)
@@ -54,7 +55,7 @@ combineFunctions lhs rhs = Functions
 
 mkResolver
   :: forall m
-  .  (Monad m, Reflection.Typeable m)
+  .  Monad m
   => [Function m]
   -> Evaluate.Resolver m
 mkResolver funs =
@@ -63,7 +64,7 @@ mkResolver funs =
     funItem
       :: Function m
       -> HashMap.HashMap Text (Functions m)
-    funItem fun@(Function name _decode returnType _encode _call) =
+    funItem fun@(Function name _decode returnType _encode) =
       HashMap.singleton name Functions
         { functionsByType    = HashMap.singleton (Reflection.SomeTypeRep returnType) fun
         , functionsByEncoder = [fun]
@@ -77,9 +78,9 @@ mkResolver funs =
       case HashMap.lookup name allFuns of
         Just functions ->
           case HashMap.lookup targetTyp (functionsByType functions) of
-            Just (Function _ decode returnType _ call)
+            Just (Function _ decode returnType _)
               | Just Reflection.HRefl <- Reflection.eqTypeRep returnType targetTypeRep ->
-                Evaluate.withEvaluate (>>= call) (Decode.JSON.evalFieldDecoder decode args)
+                Evaluate.withEvaluate join $ Decode.JSON.evalFieldDecoder decode args
 
             _ ->
               Evaluate.throwEvaluateError
@@ -93,10 +94,10 @@ mkResolver funs =
     resolveTopLevel :: Text -> Value.Object -> [Evaluate.TopLevel m]
     resolveTopLevel name args =
       [ Evaluate.TopLevel encode
-        $ Evaluate.withEvaluate (>>= call)
+        $ Evaluate.withEvaluate join
         $ Decode.JSON.evalFieldDecoder decode args
-      | Function _ decode _ (Just encode) call <-
-          maybe [] functionsByEncoder $ HashMap.lookup name allFuns
+      | Function _ decode _ (Just encode) <-
+        maybe [] functionsByEncoder $ HashMap.lookup name allFuns
       ]
 
 ---
@@ -143,7 +144,7 @@ instance Aeson.FromJSON TopLevelQuery where
       <*> traverse Decode.JSON.parseJson return
 
 runTopLevelQuery
-  :: (Monad m, Reflection.Typeable m)
+  :: Monad m
   => Evaluate.Resolver m
   -> TopLevelQuery
   -> Either TopLevelQueryError (m Aeson.Value)
