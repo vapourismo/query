@@ -20,7 +20,6 @@ import           Control.Monad ((<=<))
 import qualified Data.Aeson as Aeson
 import           Data.Bifunctor (Bifunctor (first))
 import qualified Data.Query.Decode.Types as Decode
-import qualified Data.Query.Evaluate as Evaluate
 import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Value as Value
 import qualified Data.Text as Text
@@ -28,10 +27,10 @@ import qualified Data.Text as Text
 ---
 
 decodeNumber
-  :: Applicative m
+  :: Decode.DecodeContext m
   => Primitives.NumberInfo a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> m a
 decodeNumber info value =
   Primitives.reifyNumberConstraints (Primitives.numberInfo_format info) $ lift $ do
     number <-
@@ -66,7 +65,7 @@ decodeNumber info value =
   where
     decoder = Decode.PrimitiveDecoder $ Primitives.Number info
 
-    lift = either (Evaluate.throwQueryError . Evaluate.DecodeError) pure
+    lift = either Decode.throwDecodeError pure
 
 encodeNumber
   :: Primitives.NumberInfo a
@@ -78,10 +77,10 @@ encodeNumber info =
 ---
 
 decodeInteger
-  :: Applicative m
+  :: Decode.DecodeContext m
   => Primitives.IntegerInfo a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> m a
 decodeInteger info value =
   Primitives.reifyIntegerConstraints (Primitives.integerInfo_format info) $ lift $ do
     integer <-
@@ -122,7 +121,7 @@ decodeInteger info value =
   where
     decoder = Decode.PrimitiveDecoder $ Primitives.Integer info
 
-    lift = either (Evaluate.throwQueryError . Evaluate.DecodeError) pure
+    lift = either Decode.throwDecodeError pure
 
 encodeInteger
   :: Primitives.IntegerInfo a
@@ -135,19 +134,18 @@ encodeInteger info =
 
 decodeString
   :: forall a m
-  .  Applicative m
+  .  Decode.DecodeContext m
   => Primitives.StringFormat a
   -> Value.NoCallValue
-  -> Evaluate.Evaluate m a
+  -> m a
 decodeString format value =
   case value of
     Value.String string ->
       case parse (Aeson.String string) of
         Aeson.Success x -> pure x
-        Aeson.Error msg -> Evaluate.throwQueryError $ Evaluate.DecodeError $
-          Decode.BadPrimitive value $ Text.pack msg
+        Aeson.Error msg -> Decode.throwDecodeError $ Decode.BadPrimitive value $ Text.pack msg
 
-    _ -> Evaluate.throwQueryError $ Evaluate.DecodeError $ Decode.UnexpectedInput decoder value
+    _ -> Decode.throwDecodeError $ Decode.UnexpectedInput decoder value
   where
     decoder = Decode.PrimitiveDecoder $ Primitives.String format
 
@@ -172,11 +170,15 @@ encodeString = \case
 
 ---
 
-decodePrimitive :: Applicative m => Primitives.Primitive a -> Value.NoCallValue -> Evaluate.Evaluate m a
+decodePrimitive
+  :: Decode.DecodeContext m
+  => Primitives.Primitive a
+  -> Value.NoCallValue
+  -> m a
 decodePrimitive = \case
   Primitives.Boolean -> \case
     Value.Bool bool -> pure bool
-    value -> Evaluate.throwQueryError $ Evaluate.DecodeError $
+    value -> Decode.throwDecodeError $
       Decode.UnexpectedInput (Decode.PrimitiveDecoder Primitives.Boolean) value
 
   Primitives.Number info -> decodeNumber info

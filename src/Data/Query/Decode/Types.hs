@@ -10,12 +10,14 @@
 module Data.Query.Decode.Types where
 
 import           Control.Applicative.Free (Ap, runAp_)
+import qualified Data.Aeson.Types as Aeson
 import           Data.Fix (Fix (Fix), foldFix)
 import           Data.Functor.Coyoneda (Coyoneda (..))
 import qualified Data.HashMap.Strict as HashMap
 import           Data.HashSet (HashSet)
 import qualified Data.Query.Primitives as Primitives
 import qualified Data.Query.Shape as Shape
+import qualified Data.Query.Types as Types
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.Query.Value as Value
 import           Data.Text (Text)
@@ -167,3 +169,17 @@ data DecodeError
   | BadPrimitive Value.NoCallValue Text
 
 deriving instance Show DecodeError
+
+class Applicative m => DecodeContext m where
+  throwDecodeError :: DecodeError -> m a
+
+  nestDecodeError :: Types.Path -> m a -> m a
+
+  callFunction :: Reflection.TypeRep a -> Text -> Value.Object -> m a
+
+instance DecodeContext Aeson.Parser where
+  throwDecodeError = fail . show
+
+  nestDecodeError _ = id
+
+  callFunction _ _ _ = error "Function calls are not supported when only parsing"
