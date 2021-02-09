@@ -56,6 +56,7 @@ module Data.Query.Encode
 
     -- * Enums
   , enum
+  , enum'
   , enumWith
 
     -- ** Items
@@ -358,10 +359,17 @@ stringMapWith = liftBase . Types.StringMapEncoder
 -- Note: While in practise this encoder isn't partial, a bad 'Enum' implementation can make it so.
 --
 enum :: forall a. (Bounded a, Enum a, Show a) => Types.Encoder a
-enum =
+enum = enum' (Text.pack . show)
+
+-- | Encode an enum with a changed string representation.
+--
+-- Note: While in practise this encoder isn't partial, a bad 'Enum' implementation can make it so.
+--
+enum' :: forall a. (Bounded a, Enum a) => (a -> Text) -> Types.Encoder a
+enum' show =
   Utilities.instantiateProduct [minBound .. maxBound @a] $ \product ->
     let
-      items = SOP.hmap (item . Text.pack . show . SOP.unK) product
+      items = SOP.hmap (item . show . SOP.unK) product
 
       valueMap =
         IntMap.fromList $ SOP.hcollapse $

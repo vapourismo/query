@@ -60,6 +60,8 @@ module Data.Query.Schema
   , stringMapWith
 
     -- * Enums
+  , enum
+  , enum'
   , enumWith
 
     -- ** Items
@@ -102,7 +104,9 @@ import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix), unFix)
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Int (Int16, Int32, Int64, Int8)
+import qualified Data.IntMap.Strict as IntMap
 import           Data.Kind (Type)
+import           Data.Maybe (fromMaybe)
 import           Data.Profunctor (Profunctor (dimap), lmap)
 import           Data.Profunctor.Yoneda (Coyoneda (Coyoneda), returnCoyoneda)
 import qualified Data.Query.Generic as Generic
@@ -114,6 +118,7 @@ import qualified Data.SOP as SOP
 import           Data.SOP.NP (NP (..))
 import           Data.Scientific (Scientific)
 import           Data.Text (Text)
+import qualified Data.Text as Text
 import           Data.Time (Day, UTCTime)
 import qualified Data.Vector as Vector
 import           Data.Word (Word16, Word32, Word64, Word8)
@@ -544,6 +549,40 @@ stringMapWith
   -> Types.Schema (HashMap.HashMap Text a) (HashMap.HashMap Text b)
 stringMapWith =
   liftBase . Types.StringMapSchema
+
+-- | Schema for an enum
+--
+-- Note: While in practise this schema isn't partial, a bad 'Enum' implementation can make it so.
+--
+enum :: forall a. (Bounded a, Enum a, Show a) => Types.Schema a a
+enum = enum' (Text.pack . show)
+
+-- | Schema for an enum type which allows overloading its string representation
+--
+-- Note: While in practise this schema isn't partial, a bad 'Enum' implementation can make it so.
+--
+enum' :: forall a. (Bounded a, Enum a) => (a -> Text) -> Types.Schema a a
+enum' show =
+  Utilities.instantiateProduct [minBound .. maxBound @a] $ \product ->
+    let
+      items = SOP.hmap (\(SOP.K x) -> itemWith (show x) SOP.Proxy) product
+
+      valueMap =
+        IntMap.fromList $ SOP.hcollapse $
+          SOP.hzipWith
+            (\(SOP.K value) (SOP.Fn f) ->
+              SOP.K (fromEnum value, SOP.unK (f SOP.Proxy))
+            )
+            product
+            SOP.injections
+
+      toNS value =
+        fromMaybe (error "Unknown enum value") $
+          IntMap.lookup (fromEnum value) valueMap
+
+      fromNS sum = SOP.hcollapse $ SOP.hzipWith const product sum
+    in
+      dimap toNS fromNS $ enumWith items
 
 -- | Schema for an enum
 enumWith

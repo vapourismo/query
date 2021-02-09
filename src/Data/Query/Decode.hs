@@ -63,6 +63,7 @@ module Data.Query.Decode
 
     -- * Enums
   , enum
+  , enum'
   , enumWith
 
     -- * Variants
@@ -384,9 +385,13 @@ stringMapWith =
 
 -- | Decode an enum.
 enum :: (Show a, Bounded a, Enum a) => Types.Decoder a
-enum =
+enum = enum' (Text.pack . show)
+
+-- | Decode an enum with a changed string representation.
+enum' :: (Bounded a, Enum a) => (a -> Text) -> Types.Decoder a
+enum' show =
   enumWith $ HashMap.fromList
-    [ (Text.pack (show elem), elem)
+    [ (show elem, elem)
     | elem <- [minBound .. maxBound]
     ]
 
