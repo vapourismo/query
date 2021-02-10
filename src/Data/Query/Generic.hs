@@ -211,7 +211,13 @@ instance
               SOP.hczipWith
                 (SOP.Proxy :: SOP.Proxy (SOP.All (Class.SupplementalClass cls)))
                 (\(ConstructorApplication run) (info :: Generics.ConstructorInfo xs) ->
-                  Class.constructorWith (Text.pack (Generics.constructorName info)) id id
+                  Class.constructorWith
+                    (Options.variantConstructorModifier
+                      options
+                      (Text.pack (Generics.constructorName info))
+                    )
+                    id
+                    id
                   $ Class.querySchemaWith
                   $ run info
                 )
