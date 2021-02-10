@@ -1,5 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -89,7 +91,9 @@ module Data.Query.Schema
   , field
   , fieldWith
   , optionalField
+  , optionalFieldDefault
   , optionalFieldWith
+  , optionalFieldDefaultWith
 
     -- * Shapes
   , Types.querySchemaToQueryShape
@@ -99,9 +103,9 @@ module Data.Query.Schema
 where
 
 import           Control.Applicative.Free (liftAp)
-import           Data.ByteString (ByteString)
 import           Data.Coerce (coerce)
 import           Data.Fix (Fix (Fix), unFix)
+import           Data.Function ((&))
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Int (Int16, Int32, Int64, Int8)
 import qualified Data.IntMap.Strict as IntMap
@@ -115,13 +119,13 @@ import qualified Data.Query.Schema.Types as Types
 import qualified Data.Query.Shape as Shape
 import qualified Data.Query.Utilities as Utilities
 import qualified Data.SOP as SOP
-import           Data.SOP.NP (NP (..))
 import           Data.Scientific (Scientific)
 import           Data.Text (Text)
 import qualified Data.Text as Text
-import           Data.Time (Day, UTCTime)
 import qualified Data.Vector as Vector
 import           Data.Word (Word16, Word32, Word64, Word8)
+import           GHC.Generics (Generic)
+import qualified Generics.SOP
 import           Numeric.Natural (Natural)
 import qualified Type.Reflection as Reflection
 
@@ -201,144 +205,113 @@ instance (Reflection.Typeable f, HasSchema (f (Fix f))) => HasSchema (Fix f) whe
 
 instance HasSchema a => HasSchema (Primitives.Limit a)
 
-instance HasSchema (Utilities.Some Primitives.NumberInfo) where
-  schema =
-    dimap from to $ variantWith
-      $  constructorWith "NoNumberFormat" id id (limited Primitives.NoNumberFormat)
-      :* constructorWith "FloatFormat" id id (limited Primitives.FloatFormat)
-      :* constructorWith "DoubleFormat" id id (limited Primitives.DoubleFormat)
-      :* Nil
-    where
-      limited
-        :: HasSchema a
-        => Primitives.NumberFormat a
-        -> Types.QuerySchema (Primitives.NumberInfo a) (Primitives.NumberInfo a)
-      limited format = querySchemaWith $ recordWith $
-        Primitives.NumberInfo format
-          <$> field "lowerLimit" Primitives.numberInfo_lowerLimit
-          <*> field "upperLimit" Primitives.numberInfo_upperLimit
+instance HasSchema a => HasSchema (Primitives.NumberInfo a) where
+  schema = recordWith $
+    Primitives.NumberInfo
+      <$> optionalFieldDefault "lowerLimit" Primitives.NoLimit Primitives.numberInfo_lowerLimit
+      <*> optionalFieldDefault "upperLimit" Primitives.NoLimit Primitives.numberInfo_upperLimit
 
-      from
-        :: Utilities.Some Primitives.NumberInfo
-        -> SOP.NS Primitives.NumberInfo '[Scientific, Float, Double]
-      from (Utilities.Some info) =
-        case Primitives.numberInfo_format info of
-          Primitives.NoNumberFormat -> SOP.Z info
-          Primitives.FloatFormat -> SOP.S $ SOP.Z info
-          Primitives.DoubleFormat -> SOP.S $ SOP.S $ SOP.Z info
+instance HasSchema a => HasSchema (Primitives.IntegerInfo a) where
+  schema = recordWith $
+    Primitives.IntegerInfo
+      <$> optionalFieldDefault "lowerLimit" Primitives.NoLimit Primitives.integerInfo_lowerLimit
+      <*> optionalFieldDefault "upperLimit" Primitives.NoLimit Primitives.integerInfo_upperLimit
+      <*> optionalField "multipleOf" Primitives.integerInfo_multipleOf
 
-      to
-        :: SOP.NS Primitives.NumberInfo '[Scientific, Float, Double]
-        -> Utilities.Some Primitives.NumberInfo
-      to =
-        SOP.hcollapse . SOP.hmap (SOP.K . Utilities.Some)
+data PrimNumberFormat
+  = PrimNoNumberFormat (Primitives.NumberInfo Scientific )
+  | PrimFloatFormat (Primitives.NumberInfo Float)
+  | PrimDoubleFormat (Primitives.NumberInfo Double)
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (Generics.SOP.Generic, Generics.SOP.HasDatatypeInfo)
+  deriving HasSchema via
+    Generic.CustomGeneric '[Generic.TrimVariantConstructorPrefix "Prim"] PrimNumberFormat
 
-instance HasSchema (Utilities.Some Primitives.IntegerInfo) where
-  schema =
-    dimap from to $ variantWith
-      $  constructorWith "NoIntegerFormat" id id (limited Primitives.NoIntegerFormat)
-      :* constructorWith "Int32Format" id id (limited Primitives.Int32Format)
-      :* constructorWith "Int64Format" id id (limited Primitives.Int64Format)
-      :* Nil
-    where
-      limited
-        :: HasSchema a
-        => Primitives.IntegerFormat a
-        -> Types.QuerySchema (Primitives.IntegerInfo a) (Primitives.IntegerInfo a)
-      limited format = querySchemaWith $ recordWith $
-        Primitives.IntegerInfo format
-          <$> field "lowerLimit" Primitives.integerInfo_lowerLimit
-          <*> field "upperLimit" Primitives.integerInfo_upperLimit
-          <*> optionalField "multipleOf" Primitives.integerInfo_multipleOf
+data PrimIntegerFormat
+  = PrimNoIntegerFormat (Primitives.IntegerInfo Integer)
+  | PrimInt32Format (Primitives.IntegerInfo Int32)
+  | PrimInt64Format (Primitives.IntegerInfo Int64)
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (Generics.SOP.Generic, Generics.SOP.HasDatatypeInfo)
+  deriving HasSchema via
+    Generic.CustomGeneric '[Generic.TrimVariantConstructorPrefix "Prim"] PrimIntegerFormat
 
-      from
-        :: Utilities.Some Primitives.IntegerInfo
-        -> SOP.NS Primitives.IntegerInfo '[Integer, Int32, Int64]
-      from (Utilities.Some info) =
-        case Primitives.integerInfo_format info of
-          Primitives.NoIntegerFormat -> SOP.Z info
-          Primitives.Int32Format -> SOP.S $ SOP.Z info
-          Primitives.Int64Format -> SOP.S $ SOP.S $ SOP.Z info
+data PrimStringFormat
+  = PrimNoStringFormat
+  | PrimByteFormat
+  | PrimBinaryFormat
+  | PrimDateFormat
+  | PrimDateTimeFormat
+  | PrimPasswordFormat
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (Generics.SOP.Generic, Generics.SOP.HasDatatypeInfo)
+  deriving HasSchema via
+    Generic.CustomGeneric '[Generic.TrimEnumItemPrefix "Prim"] PrimStringFormat
 
-      to
-        :: SOP.NS Primitives.IntegerInfo '[Integer, Int32, Int64]
-        -> Utilities.Some Primitives.IntegerInfo
-      to =
-        SOP.hcollapse . SOP.hmap (SOP.K . Utilities.Some)
-
-instance HasSchema (Utilities.Some Primitives.StringFormat) where
-  schema =
-    dimap from to $ enumWith
-      $  itemWith "NoStringFormat" Primitives.NoStringFormat
-      :* itemWith "ByteFormat" Primitives.ByteFormat
-      :* itemWith "BinaryFormat" Primitives.BinaryFormat
-      :* itemWith "DateFormat" Primitives.DateFormat
-      :* itemWith "DateTimeFormat" Primitives.DateTimeFormat
-      :* itemWith "PasswordFormat" Primitives.PasswordFormat
-      :* Nil
-    where
-      from
-        :: Utilities.Some Primitives.StringFormat
-        -> SOP.NS Primitives.StringFormat '[Text, ByteString, Text, Day, UTCTime, Text]
-      from = \case
-        Utilities.Some inner@Primitives.NoStringFormat ->
-          SOP.Z inner
-        Utilities.Some inner@Primitives.ByteFormat ->
-          SOP.S $ SOP.Z inner
-        Utilities.Some inner@Primitives.BinaryFormat ->
-          SOP.S $ SOP.S $ SOP.Z inner
-        Utilities.Some inner@Primitives.DateFormat ->
-          SOP.S $ SOP.S $ SOP.S $ SOP.Z inner
-        Utilities.Some inner@Primitives.DateTimeFormat ->
-          SOP.S $ SOP.S $ SOP.S $ SOP.S $ SOP.Z inner
-        Utilities.Some inner@Primitives.PasswordFormat ->
-          SOP.S $ SOP.S $ SOP.S $ SOP.S $ SOP.S $ SOP.Z inner
-
-      to
-        :: SOP.NS Primitives.StringFormat '[Text, ByteString, Text, Day, UTCTime, Text]
-        -> Utilities.Some Primitives.StringFormat
-      to =
-        SOP.hcollapse . SOP.hmap (SOP.K . Utilities.Some)
+data Prim
+  = PrimBool
+  | PrimNumber PrimNumberFormat
+  | PrimInteger PrimIntegerFormat
+  | PrimString PrimStringFormat
+  deriving stock (Show, Eq, Ord, Generic)
+  deriving anyclass (Generics.SOP.Generic, Generics.SOP.HasDatatypeInfo)
+  deriving HasSchema via
+    Generic.CustomGeneric '[Generic.TrimVariantConstructorPrefix "Prim"] Prim
 
 instance HasSchema Primitives.SomePrimitive where
   schema =
-    dimap from to $ variantWith
-      $  constructorWith "Boolean" (const ()) (const (Utilities.Some SOP.Proxy)) querySchema
-      :* constructorWith "Number" id id querySchema
-      :* constructorWith "Integer" id id querySchema
-      :* constructorWith "String" id id querySchema
-      :* Nil
+    dimap toPrim fromPrim schema
     where
-      from
-        :: Primitives.SomePrimitive
-        -> SOP.NS Utilities.Some '[SOP.Proxy, Primitives.NumberInfo, Primitives.IntegerInfo, Primitives.StringFormat]
-      from (Primitives.SomePrimitive prim) =
+      toPrim :: Primitives.SomePrimitive -> Prim
+      toPrim (Primitives.SomePrimitive prim) =
         case prim of
-          Primitives.Boolean ->
-            SOP.Z $ Utilities.Some SOP.Proxy
-          Primitives.Number info ->
-            SOP.S $ SOP.Z $ Utilities.Some info
-          Primitives.Integer info ->
-            SOP.S $ SOP.S $ SOP.Z $ Utilities.Some info
-          Primitives.String format ->
-            SOP.S $ SOP.S $ SOP.S $ SOP.Z $ Utilities.Some format
+          Primitives.Boolean -> PrimBool
 
-      ejections
-        :: SOP.NP
-            (Utilities.Some SOP.-.-> SOP.K Primitives.SomePrimitive)
-            '[SOP.Proxy, Primitives.NumberInfo, Primitives.IntegerInfo, Primitives.StringFormat]
-      ejections =
-        SOP.Fn (\(Utilities.Some SOP.Proxy) -> SOP.K $ Primitives.SomePrimitive Primitives.Boolean)
-        :* SOP.Fn (\(Utilities.Some info) -> SOP.K $ Primitives.SomePrimitive $ Primitives.Number info)
-        :* SOP.Fn (\(Utilities.Some info) -> SOP.K $ Primitives.SomePrimitive $ Primitives.Integer info)
-        :* SOP.Fn (\(Utilities.Some format) -> SOP.K $ Primitives.SomePrimitive $ Primitives.String format)
-        :* Nil
+          Primitives.Number format info -> PrimNumber $ info &
+            case format of
+              Primitives.NoNumberFormat -> PrimNoNumberFormat
+              Primitives.FloatFormat -> PrimFloatFormat
+              Primitives.DoubleFormat  -> PrimDoubleFormat
 
-      to
-        :: SOP.NS Utilities.Some '[SOP.Proxy, Primitives.NumberInfo, Primitives.IntegerInfo, Primitives.StringFormat]
-        -> Primitives.SomePrimitive
-      to =
-        SOP.hcollapse . SOP.hzipWith SOP.apFn ejections
+          Primitives.Integer format info -> PrimInteger $ info &
+            case format of
+              Primitives.NoIntegerFormat -> PrimNoIntegerFormat
+              Primitives.Int32Format -> PrimInt32Format
+              Primitives.Int64Format -> PrimInt64Format
+
+          Primitives.String format -> PrimString $
+            case format of
+              Primitives.NoStringFormat -> PrimNoStringFormat
+              Primitives.ByteFormat -> PrimByteFormat
+              Primitives.BinaryFormat -> PrimBinaryFormat
+              Primitives.DateFormat -> PrimDateFormat
+              Primitives.DateTimeFormat -> PrimDateTimeFormat
+              Primitives.PasswordFormat -> PrimPasswordFormat
+
+      fromPrim :: Prim -> Primitives.SomePrimitive
+      fromPrim = \case
+        PrimBool -> Primitives.SomePrimitive Primitives.Boolean
+
+        PrimNumber format -> let make f = Primitives.SomePrimitive . Primitives.Number f in
+          case format of
+            PrimNoNumberFormat info -> make Primitives.NoNumberFormat info
+            PrimFloatFormat info -> make Primitives.FloatFormat info
+            PrimDoubleFormat info -> make Primitives.DoubleFormat info
+
+        PrimInteger format -> let make f = Primitives.SomePrimitive . Primitives.Integer f in
+          case format of
+            PrimNoIntegerFormat info -> make Primitives.NoIntegerFormat info
+            PrimInt32Format info -> make Primitives.Int32Format info
+            PrimInt64Format info -> make Primitives.Int64Format info
+
+        PrimString format -> let make = Primitives.SomePrimitive . Primitives.String in
+          case format of
+            PrimNoStringFormat -> make Primitives.NoStringFormat
+            PrimByteFormat -> make Primitives.ByteFormat
+            PrimBinaryFormat -> make Primitives.BinaryFormat
+            PrimDateFormat -> make Primitives.DateFormat
+            PrimDateTimeFormat -> make Primitives.DateTimeFormat
+            PrimPasswordFormat -> make Primitives.PasswordFormat
 
 instance HasSchema a => HasSchema (Shape.FieldShapeF a) where
   schema = record
@@ -410,25 +383,22 @@ bool = primitive Primitives.Boolean
 
 -- | Float schema
 float :: Types.Schema Float Float
-float = primitive $ Primitives.Number Primitives.NumberInfo
-  { Primitives.numberInfo_format = Primitives.FloatFormat
-  , Primitives.numberInfo_lowerLimit = Primitives.NoLimit
+float = primitive $ Primitives.Number Primitives.FloatFormat Primitives.NumberInfo
+  { Primitives.numberInfo_lowerLimit = Primitives.NoLimit
   , Primitives.numberInfo_upperLimit = Primitives.NoLimit
   }
 
 -- | Double schema
 double :: Types.Schema Double Double
-double = primitive $ Primitives.Number Primitives.NumberInfo
-  { Primitives.numberInfo_format = Primitives.DoubleFormat
-  , Primitives.numberInfo_lowerLimit = Primitives.NoLimit
+double = primitive $ Primitives.Number Primitives.DoubleFormat Primitives.NumberInfo
+  { Primitives.numberInfo_lowerLimit = Primitives.NoLimit
   , Primitives.numberInfo_upperLimit = Primitives.NoLimit
   }
 
 -- | Numeric schema
 number :: Types.Schema Scientific Scientific
-number = primitive $ Primitives.Number Primitives.NumberInfo
-  { Primitives.numberInfo_format = Primitives.NoNumberFormat
-  , Primitives.numberInfo_lowerLimit = Primitives.NoLimit
+number = primitive $ Primitives.Number Primitives.NoNumberFormat Primitives.NumberInfo
+  { Primitives.numberInfo_lowerLimit = Primitives.NoLimit
   , Primitives.numberInfo_upperLimit = Primitives.NoLimit
   }
 
@@ -438,9 +408,8 @@ boundedIntegral
   => Primitives.IntegerFormat b
   -> Types.Schema a a
 boundedIntegral format =
-  dimap fromIntegral fromIntegral $ primitive $ Primitives.Integer Primitives.IntegerInfo
-    { Primitives.integerInfo_format = format
-    , Primitives.integerInfo_lowerLimit = Primitives.InclusiveLimit $ fromIntegral $ minBound @a
+  dimap fromIntegral fromIntegral $ primitive $ Primitives.Integer format Primitives.IntegerInfo
+    { Primitives.integerInfo_lowerLimit = Primitives.InclusiveLimit $ fromIntegral $ minBound @a
     , Primitives.integerInfo_upperLimit = Primitives.InclusiveLimit $ fromIntegral $ maxBound @a
     , Primitives.integerInfo_multipleOf = Nothing
     }
@@ -455,18 +424,16 @@ int16 = boundedIntegral Primitives.Int32Format
 
 -- | Int32 schema
 int32 :: Types.Schema Int32 Int32
-int32 = primitive $ Primitives.Integer Primitives.IntegerInfo
-  { Primitives.integerInfo_format = Primitives.Int32Format
-  , Primitives.integerInfo_lowerLimit = Primitives.NoLimit
+int32 = primitive $ Primitives.Integer Primitives.Int32Format Primitives.IntegerInfo
+  { Primitives.integerInfo_lowerLimit = Primitives.NoLimit
   , Primitives.integerInfo_upperLimit = Primitives.NoLimit
   , Primitives.integerInfo_multipleOf = Nothing
   }
 
 -- | Int64 schema
 int64 :: Types.Schema Int64 Int64
-int64 = primitive $ Primitives.Integer Primitives.IntegerInfo
-  { Primitives.integerInfo_format = Primitives.Int64Format
-  , Primitives.integerInfo_lowerLimit = Primitives.NoLimit
+int64 = primitive $ Primitives.Integer Primitives.Int64Format Primitives.IntegerInfo
+  { Primitives.integerInfo_lowerLimit = Primitives.NoLimit
   , Primitives.integerInfo_upperLimit = Primitives.NoLimit
   , Primitives.integerInfo_multipleOf = Nothing
   }
@@ -477,9 +444,8 @@ int = boundedIntegral Primitives.NoIntegerFormat
 
 -- | Integer schema
 integer :: Types.Schema Integer Integer
-integer = primitive $ Primitives.Integer Primitives.IntegerInfo
-  { Primitives.integerInfo_format = Primitives.NoIntegerFormat
-  , Primitives.integerInfo_lowerLimit = Primitives.NoLimit
+integer = primitive $ Primitives.Integer Primitives.NoIntegerFormat Primitives.IntegerInfo
+  { Primitives.integerInfo_lowerLimit = Primitives.NoLimit
   , Primitives.integerInfo_upperLimit = Primitives.NoLimit
   , Primitives.integerInfo_multipleOf = Nothing
   }
@@ -506,12 +472,12 @@ word = boundedIntegral Primitives.NoIntegerFormat
 
 -- | Natural schema
 natural :: Types.Schema Natural Natural
-natural = dimap toInteger fromInteger $ primitive $ Primitives.Integer Primitives.IntegerInfo
-  { Primitives.integerInfo_format = Primitives.NoIntegerFormat
-  , Primitives.integerInfo_lowerLimit = Primitives.InclusiveLimit 0
-  , Primitives.integerInfo_upperLimit = Primitives.NoLimit
-  , Primitives.integerInfo_multipleOf = Nothing
-  }
+natural = dimap toInteger fromInteger $ primitive $
+  Primitives.Integer Primitives.NoIntegerFormat Primitives.IntegerInfo
+    { Primitives.integerInfo_lowerLimit = Primitives.InclusiveLimit 0
+    , Primitives.integerInfo_upperLimit = Primitives.NoLimit
+    , Primitives.integerInfo_multipleOf = Nothing
+    }
 
 -- | String schema
 string :: Types.Schema Text Text
@@ -678,6 +644,16 @@ optionalField
 optionalField name =
   optionalFieldWith name querySchema
 
+-- | Optional record field with a default value
+optionalFieldDefault
+  :: HasSchema b
+  => Text -- ^ Field name
+  -> b -- ^ Default field value
+  -> (a -> b) -- ^ Field accessor
+  -> Types.FieldsSchema a b
+optionalFieldDefault name =
+  optionalFieldDefaultWith name querySchema
+
 -- | Optional record field schema
 optionalFieldWith
   :: Text -- ^ Field name
@@ -686,6 +662,17 @@ optionalFieldWith
   -> Types.FieldsSchema a (Maybe b)
 optionalFieldWith name querySchema f =
   lmap f $ liftFieldSchema $ Types.OptionalFieldSchema name querySchema
+
+-- | Optional record field with a default value
+optionalFieldDefaultWith
+  :: HasSchema b
+  => Text -- ^ Field name
+  -> Types.QuerySchema b' b -- ^ Schema for the field value when it is present
+  -> b -- ^ Default field value
+  -> (a -> b') -- ^ Field accessor
+  -> Types.FieldsSchema a b
+optionalFieldDefaultWith name querySchema def access =
+  fmap (fromMaybe def) $ optionalFieldWith name querySchema $ Just . access
 
 -- * Generics
 

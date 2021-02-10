@@ -74,9 +74,17 @@ prettyShapeF = \case
       typed (Pretty.pretty name <> questionMark) <$> typ
     pure $ inBraces fields
   where
-    inAngles = Pretty.encloseSep Pretty.langle Pretty.rangle Pretty.comma
+    inAngles = Pretty.hang 0 .
+      Pretty.encloseSep
+        (Pretty.langle <> Pretty.space)
+        (Pretty.space <> Pretty.rangle)
+        (Pretty.comma <> Pretty.space)
 
-    inBraces = Pretty.encloseSep Pretty.lbrace Pretty.rbrace (Pretty.comma <> Pretty.space)
+    inBraces = Pretty.hang 0 .
+      Pretty.encloseSep
+      (Pretty.lbrace <> Pretty.space)
+      (Pretty.space <> Pretty.rbrace)
+      (Pretty.comma <> Pretty.space)
 
     typed name typ = name Pretty.<+> Pretty.colon Pretty.<+> typ
 

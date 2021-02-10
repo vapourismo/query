@@ -78,8 +78,7 @@ normalizeNumberLimit = \case
   DoubleFormat -> fmap fromFloatDigits
 
 data NumberInfo a = NumberInfo
-  { numberInfo_format :: NumberFormat a
-  , numberInfo_lowerLimit :: Limit a
+  { numberInfo_lowerLimit :: Limit a
   , numberInfo_upperLimit :: Limit a
   }
   deriving stock (Show, Eq, Ord, Generic)
@@ -114,8 +113,7 @@ normalizeIntegerLimit = fmap . \case
   Int64Format -> fromIntegral
 
 data IntegerInfo a = IntegerInfo
-  { integerInfo_format :: IntegerFormat a
-  , integerInfo_lowerLimit :: Limit a
+  { integerInfo_lowerLimit :: Limit a
   , integerInfo_upperLimit :: Limit a
   , integerInfo_multipleOf :: Maybe a
   }
@@ -167,8 +165,8 @@ reifyStringConstraints = \case
 
 data Primitive a where
   Boolean :: Primitive Bool
-  Number :: NumberInfo a -> Primitive a
-  Integer :: IntegerInfo a -> Primitive a
+  Number :: NumberFormat a -> NumberInfo a -> Primitive a
+  Integer :: IntegerFormat a -> IntegerInfo a -> Primitive a
   String :: StringFormat a -> Primitive a
 
 deriving instance Show a => Show (Primitive a)
@@ -189,8 +187,8 @@ type PrimitiveConstraints a = (Show a, Ord a, Reflection.Typeable a)
 reifyPrimitiveConstraints :: Primitive a -> (PrimitiveConstraints a => r) -> r
 reifyPrimitiveConstraints = \case
   Boolean -> id
-  Number info -> reifyNumberConstraints (numberInfo_format info)
-  Integer info -> reifyIntegerConstraints (integerInfo_format info)
+  Number format _ -> reifyNumberConstraints format
+  Integer format _ -> reifyIntegerConstraints format
   String format -> reifyStringConstraints format
 
 data SomePrimitive where
