@@ -1,4 +1,4 @@
-name: Haskell Integration
+name: "Haskell Integration (Experimental)"
 
 on:
   push: {}
@@ -13,13 +13,12 @@ on:
 jobs:
   BuildAndTest:
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
         ghc:
-          - latest
-          - "8.10.4"
-          - "8.8.4"
+          - "9.0.1"
     steps:
       - uses: actions/checkout@v2
 
@@ -47,24 +46,3 @@ jobs:
 
       - name: Run tests
         run: cabal test
-
-  HLint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - uses: haskell/actions/setup@v1.1.5
-
-      - uses: actions/cache@v2
-        with:
-          path: ~/.cabal
-          key: cabal-root-latest
-
-      - name: Update Hackage snapshot
-        run: cabal update
-
-      - name: Install HLint
-        run: cabal install --installdir=. hlint --constraint 'hlint >= 3.2'
-
-      - name: Run HLint
-        run: ./hlint src
