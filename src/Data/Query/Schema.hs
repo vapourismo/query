@@ -219,7 +219,7 @@ instance HasSchema a => HasSchema (Primitives.IntegerInfo a) where
       <*> optionalField "multipleOf" Primitives.integerInfo_multipleOf
 
 data PrimNumberFormat
-  = PrimNoNumberFormat (Primitives.NumberInfo Scientific )
+  = PrimNoNumberFormat (Primitives.NumberInfo Scientific)
   | PrimFloatFormat (Primitives.NumberInfo Float)
   | PrimDoubleFormat (Primitives.NumberInfo Double)
   deriving stock (Show, Eq, Ord, Generic)

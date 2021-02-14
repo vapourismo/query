@@ -15,16 +15,16 @@ toSchema = \case
   Primitives.Boolean -> mempty
     { OpenAPI._schemaType = Just OpenAPI.OpenApiBoolean }
 
-  Primitives.Number info ->
+  Primitives.Number format info ->
     let
-      format =
-        case Primitives.numberInfo_format info of
+      formatId =
+        case format of
           Primitives.NoNumberFormat -> Nothing
           Primitives.FloatFormat -> Just "float"
           Primitives.DoubleFormat -> Just "double"
 
       checkLimit limit =
-        case Primitives.normalizeNumberLimit (Primitives.numberInfo_format info) limit of
+        case Primitives.normalizeNumberLimit format limit of
           Primitives.NoLimit -> (Nothing, Nothing)
           Primitives.InclusiveLimit limit -> (Just limit, Just False)
           Primitives.ExclusiveLimit limit -> (Just limit, Just True)
@@ -34,23 +34,23 @@ toSchema = \case
 
     in mempty
       { OpenAPI._schemaType = Just OpenAPI.OpenApiNumber
-      , OpenAPI._schemaFormat = format
+      , OpenAPI._schemaFormat = formatId
       , OpenAPI._schemaMinimum = lowerLimit
       , OpenAPI._schemaExclusiveMinimum = exclusiveLower
       , OpenAPI._schemaMaximum = upperLimit
       , OpenAPI._schemaExclusiveMaximum = exclusiveUpper
       }
 
-  Primitives.Integer info ->
+  Primitives.Integer format info ->
     let
-      format =
-        case Primitives.integerInfo_format info of
+      formatId =
+        case format of
           Primitives.NoIntegerFormat -> Nothing
           Primitives.Int32Format -> Just "int32"
           Primitives.Int64Format -> Just "int64"
 
       checkLimit limit =
-        case Primitives.normalizeIntegerLimit (Primitives.integerInfo_format info) limit of
+        case Primitives.normalizeIntegerLimit format limit of
           Primitives.NoLimit -> (Nothing, Nothing)
           Primitives.InclusiveLimit limit -> (Just limit, Just False)
           Primitives.ExclusiveLimit limit -> (Just limit, Just True)
@@ -59,13 +59,11 @@ toSchema = \case
       (lowerLimit, exclusiveLower) = checkLimit (Primitives.integerInfo_lowerLimit info)
 
       multipleOf =
-        Primitives.normalizeIntegerLimit
-          (Primitives.integerInfo_format info)
-          (Primitives.integerInfo_multipleOf info)
+        Primitives.normalizeIntegerLimit format (Primitives.integerInfo_multipleOf info)
 
     in mempty
       { OpenAPI._schemaType = Just OpenAPI.OpenApiNumber
-      , OpenAPI._schemaFormat = format
+      , OpenAPI._schemaFormat = formatId
       , OpenAPI._schemaMinimum = lowerLimit
       , OpenAPI._schemaExclusiveMinimum = exclusiveLower
       , OpenAPI._schemaMaximum = upperLimit

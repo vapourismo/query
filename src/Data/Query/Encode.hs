@@ -203,15 +203,6 @@ instance HasEncoder (f (Fix f)) => HasEncoder (Fix f) where
 
 instance HasEncoder a => HasEncoder (Primitives.Limit a)
 
-instance HasEncoder (Utilities.Some Primitives.NumberInfo) where
-  encoder = schemaEncoder
-
-instance HasEncoder (Utilities.Some Primitives.IntegerInfo) where
-  encoder = schemaEncoder
-
-instance HasEncoder (Utilities.Some Primitives.StringFormat) where
-  encoder = schemaEncoder
-
 instance HasEncoder Primitives.SomePrimitive where
   encoder = schemaEncoder
 

@@ -198,15 +198,6 @@ instance (Reflection.Typeable f, HasDecoder (f (Fix f))) => HasDecoder (Fix f) w
 
 instance HasDecoder a => HasDecoder (Primitives.Limit a)
 
-instance HasDecoder (Utilities.Some Primitives.NumberInfo) where
-  decoder = schemaDecoder
-
-instance HasDecoder (Utilities.Some Primitives.IntegerInfo) where
-  decoder = schemaDecoder
-
-instance HasDecoder (Utilities.Some Primitives.StringFormat) where
-  decoder = schemaDecoder
-
 instance HasDecoder Primitives.SomePrimitive where
   decoder = schemaDecoder
 

@@ -24,11 +24,12 @@ import qualified Data.Query.Value as Value
 import qualified Data.Text as Text
 
 decodeNumber
-  :: Primitives.NumberInfo a
+  :: Primitives.NumberFormat a
+  -> Primitives.NumberInfo a
   -> Value.NoCallValue
   -> Either Decode.DecodeError a
-decodeNumber info value =
-  Primitives.reifyNumberConstraints (Primitives.numberInfo_format info) $ do
+decodeNumber format info value =
+  Primitives.reifyNumberConstraints format $ do
     number <-
       case value of
         Value.Number number ->
@@ -60,21 +61,22 @@ decodeNumber info value =
 
     Right number
   where
-    decoder = Decode.PrimitiveDecoder $ Primitives.Number info
+    decoder = Decode.PrimitiveDecoder $ Primitives.Number format info
 
 encodeNumber
-  :: Primitives.NumberInfo a
+  :: Primitives.NumberFormat a
   -> a
   -> Aeson.Value
-encodeNumber info =
-  Primitives.reifyNumberConstraints (Primitives.numberInfo_format info) Aeson.toJSON
+encodeNumber format =
+  Primitives.reifyNumberConstraints format Aeson.toJSON
 
 decodeInteger
-  :: Primitives.IntegerInfo a
+  :: Primitives.IntegerFormat a
+  -> Primitives.IntegerInfo a
   -> Value.NoCallValue
   -> Either Decode.DecodeError a
-decodeInteger info value =
-  Primitives.reifyIntegerConstraints (Primitives.integerInfo_format info) $ do
+decodeInteger format info value =
+  Primitives.reifyIntegerConstraints format $ do
     integer <-
       case value of
         Value.Number integer ->
@@ -112,14 +114,14 @@ decodeInteger info value =
 
     Right integer
   where
-    decoder = Decode.PrimitiveDecoder $ Primitives.Integer info
+    decoder = Decode.PrimitiveDecoder $ Primitives.Integer format info
 
 encodeInteger
-  :: Primitives.IntegerInfo a
+  :: Primitives.IntegerFormat a
   -> a
   -> Aeson.Value
-encodeInteger info =
-  Primitives.reifyIntegerConstraints (Primitives.integerInfo_format info) Aeson.toJSON
+encodeInteger format =
+  Primitives.reifyIntegerConstraints format Aeson.toJSON
 
 decodeString
   :: forall a
@@ -165,13 +167,13 @@ decodePrimitive = \case
     Value.Bool bool -> pure bool
     value -> Left $ Decode.UnexpectedInput (Decode.PrimitiveDecoder Primitives.Boolean) value
 
-  Primitives.Number info -> decodeNumber info
-  Primitives.Integer info -> decodeInteger info
+  Primitives.Number format info -> decodeNumber format info
+  Primitives.Integer format info -> decodeInteger format info
   Primitives.String format -> decodeString format
 
 encodePrimitive :: Primitives.Primitive a -> a -> Aeson.Value
 encodePrimitive = \case
   Primitives.Boolean -> Aeson.toJSON
-  Primitives.Number info -> encodeNumber info
-  Primitives.Integer info -> encodeInteger info
+  Primitives.Number format _ -> encodeNumber format
+  Primitives.Integer format _ -> encodeInteger format
   Primitives.String format -> encodeString format
