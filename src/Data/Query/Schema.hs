@@ -207,14 +207,14 @@ instance HasSchema a => HasSchema (Primitives.Limit a)
 instance HasSchema a => HasSchema (Primitives.NumberInfo a) where
   schema = recordWith $
     Primitives.NumberInfo
-      <$> optionalFieldDefault "lowerLimit" Primitives.NoLimit Primitives.numberInfo_lowerLimit
-      <*> optionalFieldDefault "upperLimit" Primitives.NoLimit Primitives.numberInfo_upperLimit
+      <$> optionalFieldDefault "lowerLimit" Primitives.NoLimit (Just . Primitives.numberInfo_lowerLimit)
+      <*> optionalFieldDefault "upperLimit" Primitives.NoLimit (Just . Primitives.numberInfo_upperLimit)
 
 instance HasSchema a => HasSchema (Primitives.IntegerInfo a) where
   schema = recordWith $
     Primitives.IntegerInfo
-      <$> optionalFieldDefault "lowerLimit" Primitives.NoLimit Primitives.integerInfo_lowerLimit
-      <*> optionalFieldDefault "upperLimit" Primitives.NoLimit Primitives.integerInfo_upperLimit
+      <$> optionalFieldDefault "lowerLimit" Primitives.NoLimit (Just . Primitives.integerInfo_lowerLimit)
+      <*> optionalFieldDefault "upperLimit" Primitives.NoLimit (Just . Primitives.integerInfo_upperLimit)
       <*> optionalField "multipleOf" Primitives.integerInfo_multipleOf
 
 data PrimNumberFormat
@@ -648,7 +648,7 @@ optionalFieldDefault
   :: HasSchema b
   => Text -- ^ Field name
   -> b -- ^ Default field value
-  -> (a -> b) -- ^ Field accessor
+  -> (a -> Maybe b) -- ^ Field accessor
   -> Types.FieldsSchema a b
 optionalFieldDefault name =
   optionalFieldDefaultWith name querySchema
@@ -664,14 +664,13 @@ optionalFieldWith name querySchema f =
 
 -- | Optional record field with a default value
 optionalFieldDefaultWith
-  :: HasSchema b
-  => Text -- ^ Field name
+  :: Text -- ^ Field name
   -> Types.QuerySchema b' b -- ^ Schema for the field value when it is present
   -> b -- ^ Default field value
-  -> (a -> b') -- ^ Field accessor
+  -> (a -> Maybe b') -- ^ Field accessor
   -> Types.FieldsSchema a b
 optionalFieldDefaultWith name querySchema def access =
-  fmap (fromMaybe def) $ optionalFieldWith name querySchema $ Just . access
+  fromMaybe def <$> optionalFieldWith name querySchema access
 
 -- * Generics
 

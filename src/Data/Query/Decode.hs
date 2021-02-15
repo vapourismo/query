@@ -82,10 +82,13 @@ module Data.Query.Decode
   , HasFieldsDecoder (..)
   , Types.FieldsDecoder
   , genericFields
+
   , field
   , fieldWith
   , optionalField
+  , optionalFieldDefault
   , optionalFieldWith
+  , optionalFieldDefaultWith
 
     -- * Schema derivation
   , querySchemaQuery
@@ -104,6 +107,7 @@ import qualified Data.Functor.Coyoneda as Coyoneda
 import qualified Data.HashMap.Strict as HashMap
 import           Data.Int (Int16, Int32, Int64, Int8)
 import           Data.Kind (Type)
+import           Data.Maybe (fromMaybe)
 import           Data.Profunctor (Profunctor (..))
 import qualified Data.Profunctor.Yoneda as Profunctor
 import qualified Data.Query.Decode.Types as Types
@@ -454,6 +458,15 @@ optionalField
 optionalField name =
   optionalFieldWith name query
 
+-- | See 'optionalFieldDefaultWith'.
+optionalFieldDefault
+  :: HasDecoder a
+  => Text -- ^ Field name
+  -> a
+  -> Types.FieldsDecoder a
+optionalFieldDefault name =
+  optionalFieldDefaultWith name query
+
 -- | Decode an optional field.
 optionalFieldWith
   :: Text -- ^ Field name
@@ -461,6 +474,15 @@ optionalFieldWith
   -> Types.FieldsDecoder (Maybe a)
 optionalFieldWith name query =
   Types.FieldsDecoder $ liftAp $ Types.OptionalFieldQuery name query
+
+-- | Decode an optional field with a default value.
+optionalFieldDefaultWith
+  :: Text -- ^ Field name
+  -> Types.Query b -- ^ Field value decoder if present
+  -> b -- ^ Default value when the value isn't present
+  -> Types.FieldsDecoder b
+optionalFieldDefaultWith name query def =
+  fromMaybe def <$> optionalFieldWith name query
 
 -- * Schema derivation
 
